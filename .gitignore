@@ -45,3 +45,10 @@ venv.bak/
 node_modules/
 npm-debug.log
 yarn-error.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.db
+*.sqlite3
