@@ -103,6 +103,8 @@ pytest
 ```
 
 Las pruebas usan una base de datos SQLite en memoria (no requieren MySQL en ejecución).
+Para consultar el paso a paso completo de instalación, ejecución, cobertura y solución de errores,
+ver [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Documentación
 
