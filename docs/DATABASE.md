@@ -80,6 +80,73 @@ Roles base sembrados en Fase 1: `Administrador`, `Trabajador`.
   único trabajador — `trabajador_id` es `UNIQUE`)
 - `Usuario` N—M `Rol` a través de `usuario_rol`
 
+## Diagrama de relaciones
+
+El diagrama separa dos conceptos que suelen confundirse:
+
+- **Trabajador**: persona que trabaja en la organización, tenga o no acceso al sistema.
+- **Usuario**: cuenta para iniciar sesión; cada cuenta pertenece a un único trabajador.
+
+```mermaid
+erDiagram
+    AREA ||--o{ CARGO : "organiza"
+    AREA ||--o{ TRABAJADOR : "agrupa"
+    CARGO ||--o{ TRABAJADOR : "asigna"
+    TRABAJADOR ||--o| USUARIO : "puede tener"
+    USUARIO ||--o{ USUARIO_ROL : "recibe"
+    ROL ||--o{ USUARIO_ROL : "asigna"
+
+    AREA {
+        int id PK
+        string nombre
+    }
+    CARGO {
+        int id PK
+        string nombre
+        int area_id FK
+    }
+    TRABAJADOR {
+        int id PK
+        string documento UK
+        string nombres
+        string apellidos
+        int area_id FK
+        int cargo_id FK
+    }
+    USUARIO {
+        int id PK
+        string username UK
+        string email UK
+        string password_hash
+        int trabajador_id FK
+    }
+    ROL {
+        int id PK
+        string nombre UK
+    }
+    USUARIO_ROL {
+        int usuario_id PK, FK
+        int rol_id PK, FK
+    }
+    TIPO_TURNO {
+        int id PK
+        string nombre UK
+        time hora_inicio
+        time hora_fin
+    }
+```
+
+### Cómo leerlo
+
+- Un **área** (por ejemplo, *Operaciones*) puede tener varios cargos y trabajadores.
+- Un **cargo** (por ejemplo, *Supervisor*) puede ser asignado a varios trabajadores.
+- Cada **trabajador** puede tener **cero o una cuenta de usuario**. Esto permite registrar personas que
+  todavía no necesitan ingresar a la aplicación.
+- Un **usuario** puede recibir uno o varios **roles** (por ejemplo, *Administrador* y *Trabajador*).
+  La tabla `usuario_rol` registra esas asignaciones.
+- Un **tipo de turno** (por ejemplo, *Diurno* o *Nocturno*) se administra de forma independiente en
+  esta fase; se conectará con la programación de turnos en fases posteriores.
+
 ## Creación del esquema
 
 Dos alternativas, según la fase de desarrollo:
