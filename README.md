@@ -48,16 +48,68 @@ Ver `docs/ARCHITECTURE.md` para la documentación completa de arquitectura.
 9. **Fase 9**: Auditoría y reportes
 10. **Fase 10**: Pruebas, seguridad y despliegue
 
-## Instalación
+## Instalación (Fase 1)
 
-Ver `docs/INSTALLATION.md`
+### Requisitos
+
+- Python 3.11+
+- MySQL 8+ en ejecución (o compatible), con una base de datos y usuario creados
+
+### Pasos
+
+```bash
+# 1. Crear y activar entorno virtual
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux/Mac
+
+# 2. Instalar dependencias
+pip install -r requirements.txt
+
+# 3. Configurar variables de entorno
+copy .env.example .env        # Windows
+# cp .env.example .env         # Linux/Mac
+# Editar .env con las credenciales de tu base de datos MySQL y SECRET_KEY
+
+# 4. Crear el esquema de base de datos y datos base (roles + admin)
+python -m app.db.init_db
+
+# 5. Levantar el servidor de desarrollo
+uvicorn app.main:app --reload
+```
+
+La API queda disponible en `http://localhost:8000` (docs interactivas en `/docs`).
+
+Usuario administrador inicial sembrado por `init_db`: `admin` / `Admin123!` (cambiar en producción).
+
+### Variables de entorno
+
+Ver `.env.example` para el listado completo. Las más relevantes:
+
+| Variable                       | Descripción                                              |
+|---------------------------------|-----------------------------------------------------------|
+| `DATABASE_URL`                  | URI SQLAlchemy completa (tiene prioridad sobre `DB_*`)     |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Datos de conexión MySQL individuales |
+| `SECRET_KEY`                     | Clave usada para firmar los JWT (cambiar en producción)    |
+| `JWT_ALGORITHM`                  | Algoritmo de firma JWT (por defecto `HS256`)               |
+| `ACCESS_TOKEN_EXPIRE_MINUTES`    | Vigencia del access token                                  |
+| `REFRESH_TOKEN_EXPIRE_DAYS`      | Vigencia del refresh token                                 |
+| `CORS_ORIGINS`                   | Orígenes permitidos, separados por coma                    |
+
+### Pruebas
+
+```bash
+pytest
+```
+
+Las pruebas usan una base de datos SQLite en memoria (no requieren MySQL en ejecución).
+Para consultar el paso a paso completo de instalación, ejecución, cobertura y solución de errores,
+ver [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Documentación
 
-- `docs/ARCHITECTURE.md` - Diseño completo del sistema
-- `docs/API.md` - Especificación de endpoints
-- `docs/DATABASE.md` - Esquema de base de datos
-- `docs/LEGISLATIVE.md` - Normas laborales colombianas implementadas
+- `docs/ARCHITECTURE.md` - Diseño completo del sistema (Fase 1)
+- `docs/DATABASE.md` - Esquema de base de datos (Fase 1)
 
 ## Licencia
 
