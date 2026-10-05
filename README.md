@@ -125,7 +125,9 @@ ver [`docs/TESTING.md`](docs/TESTING.md).
 ## Documentación
 
 - `docs/ARCHITECTURE.md` - Diseño completo del sistema (Fase 1)
-- `docs/DATABASE.md` - Esquema de base de datos (Fase 1)
+- `docs/DATABASE.md` - Esquema de base de datos y diagrama de relaciones
+- `docs/CARGA_MATRIZ.md` - Guía para cargar trabajadores, cargos, turnos y reemplazos (Fase 2)
+- `docs/TESTING.md` - Guía de pruebas
 
 ## Licencia
 

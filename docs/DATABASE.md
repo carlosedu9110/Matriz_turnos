@@ -1,4 +1,4 @@
-# Esquema de base de datos — Fase 1
+﻿# Esquema de base de datos — Fase 1
 
 Motor: **MySQL** (vía SQLAlchemy + PyMySQL). Los tipos usados son compatibles también con SQLite,
 lo que permite ejecutar las pruebas automatizadas sin necesidad de una instancia MySQL real.
@@ -62,6 +62,20 @@ Roles base sembrados en Fase 1: `Administrador`, `Trabajador`.
 | cargo_id          | INT FK       | → `cargos.id`, ON DELETE SET NULL, NULL      |
 | activo            | BOOLEAN      | NOT NULL, default true                       |
 
+### `reemplazos` (Fase 2)
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| id | INT PK | autoincrement |
+| trabajador_ausente_id | INT FK | → `trabajadores.id`, NOT NULL, index |
+| trabajador_reemplazo_id | INT FK | → `trabajadores.id`, NOT NULL |
+| tipo_turno_id | INT FK | → `tipos_turno.id`, ON DELETE SET NULL, NULL |
+| fecha_inicio / fecha_fin | DATE | NOT NULL, CHECK `fecha_fin >= fecha_inicio` |
+| motivo | VARCHAR(255) | NULL |
+| activo | BOOLEAN | NOT NULL, default true |
+| creado_en | DATETIME | NOT NULL, default now |
+
+Además: CHECK `trabajador_ausente_id <> trabajador_reemplazo_id` e índice (reemplazo, fechas).
+
 ### `usuarios`
 | Columna         | Tipo         | Restricciones                                        |
 |-----------------|--------------|----------------------------------------------------------|
@@ -79,6 +93,7 @@ Roles base sembrados en Fase 1: `Administrador`, `Trabajador`.
 - `Trabajador` 1—1 `Usuario` (un trabajador puede no tener usuario; un usuario siempre pertenece a un
   único trabajador — `trabajador_id` es `UNIQUE`)
 - `Usuario` N—M `Rol` a través de `usuario_rol`
+- `Reemplazo` N—1 `Trabajador` (ausente), N—1 `Trabajador` (reemplazante), N—1 `TipoTurno` (opcional)
 
 ## Diagrama de relaciones
 
@@ -93,6 +108,8 @@ erDiagram
     AREA ||--o{ TRABAJADOR : "agrupa"
     CARGO ||--o{ TRABAJADOR : "asigna"
     TRABAJADOR ||--o| USUARIO : "puede tener"
+    TRABAJADOR ||--o{ REEMPLAZO : "es cubierto en"
+    TIPO_TURNO ||--o{ REEMPLAZO : "aplica a"
     USUARIO ||--o{ USUARIO_ROL : "recibe"
     ROL ||--o{ USUARIO_ROL : "asigna"
 
@@ -127,6 +144,14 @@ erDiagram
     USUARIO_ROL {
         int usuario_id PK, FK
         int rol_id PK, FK
+    }
+    REEMPLAZO {
+        int id PK
+        int trabajador_ausente_id FK
+        int trabajador_reemplazo_id FK
+        int tipo_turno_id FK
+        date fecha_inicio
+        date fecha_fin
     }
     TIPO_TURNO {
         int id PK

@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import auth, health
+from app.api.routers import auth, catalogos, health, reemplazos, trabajadores
 from app.config import settings
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
@@ -17,3 +17,6 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(catalogos.router)
+app.include_router(trabajadores.router)
+app.include_router(reemplazos.router)
