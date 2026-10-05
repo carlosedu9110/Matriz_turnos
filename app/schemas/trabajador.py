@@ -1,4 +1,4 @@
-"""Esquemas de Trabajador."""
+﻿"""Esquemas de Trabajador."""
 from datetime import date
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -50,5 +50,21 @@ class TrabajadorOut(BaseModel):
     fecha_ingreso: date | None = None
     telefono: str | None = None
     activo: bool
+    tiene_usuario: bool = False
     area: AreaOut | None = None
     cargo: CargoOut | None = None
+
+class PosicionMatriz(BaseModel):
+    ciclo_id: int
+    ciclo_codigo: str
+    ciclo_nombre: str
+    rol: str
+    fase: int
+    titular: str | None = None
+
+
+class ImpactoOut(BaseModel):
+    en_matriz: bool
+    posiciones: list[PosicionMatriz]
+    asignaciones_futuras: int
+    reemplazos_activos: int

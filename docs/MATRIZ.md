@@ -75,3 +75,22 @@ con la del Excel. Cambios puntuales: `PUT /matriz/asignaciones` (queda marcado �
 | DELETE | `/matriz/asignaciones/{id}` | Administrador |
 
 Las ausencias se registran con `/reemplazos` (Fase 2) y se reflejan automáticamente en la matriz.
+
+## Altas y bajas de personal
+
+Botón **Personal** (solo Administrador): lista a todas las personas y permite
+**crear trabajador** (con acceso al sistema opcional), **dar / quitar acceso** (usuario y contraseña) y **dar de baja**.
+
+**Si quien sale está en la matriz, el sistema lo advierte** y no deja la baja sin resolver:
+
+- Muestra dónde participa (titular fase N / relevo de quién), cuántos turnos futuros tiene y cuántos reemplazos vigentes.
+- Hay que **elegir a quien lo reemplaza** o **crear un trabajador nuevo** ahí mismo.
+  El reemplazo hereda su puesto (fase o relevo) y sus turnos desde hoy; el historial pasado no cambia.
+- Un **relevo** puede quedar sin cubrir («Dejar el puesto de relevo sin cubrir»); un **titular** no.
+- Se anulan los reemplazos vigentes de la persona que sale. Sus accesos quedan bloqueados.
+- Protecciones: no puedes darte de baja ni quitarte el acceso a ti mismo, ni dejar al sistema sin Administrador activo.
+- Si algún titular o relevo de la matriz estuviera dado de baja (p. ej. cambios directos en la base), aparece un aviso naranja en la matriz.
+
+API: `GET /trabajadores/{id}/impacto`, `DELETE /trabajadores/{id}?reemplazo_id=N` (o `?sin_relevo=true`),
+`POST /trabajadores/{id}/usuario`, `DELETE /trabajadores/{id}/usuario`. Sin reemplazo, la baja de alguien en la matriz
+responde `409` con `codigo: EN_MATRIZ`. `PATCH` ya no permite `activo=false`: la baja siempre pasa por `DELETE`.

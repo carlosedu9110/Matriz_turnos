@@ -83,6 +83,7 @@ function render() {
   const cont = $("grid-wrap");
   cont.replaceChildren();
   $("legend").replaceChildren();
+  renderAlertas();
   const vacio = !state.matriz || !d || d.celdas.length === 0;
   $("empty").classList.toggle("hidden", !vacio);
   $("empty").textContent = !state.matriz
@@ -192,9 +193,10 @@ function renderPersona(tabla, d, dias) {
 
 // ---- Diálogos ----
 function openDialog(...content) {
-  const f = $("dlg-form");
-  f.replaceChildren(...content);
-  $("dlg").showModal();
+  const dlg = $("dlg");
+  dlg.classList.remove("wide");
+  $("dlg-form").replaceChildren(...content.filter((c) => c !== null && c !== undefined));
+  if (!dlg.open) dlg.showModal();
 }
 const closeDialog = () => $("dlg").close();
 const cancelBtn = () => el("button", { class: "btn", type: "button", onclick: closeDialog }, "Cerrar");
@@ -267,6 +269,194 @@ function openGenerar() {
   );
 }
 
+// ---- Personal: altas, accesos y bajas ----
+const inputEl = (name, label, attrs = {}) => {
+  const input = el("input", { name, ...attrs });
+  return { input, label: el("label", {}, label, input) };
+};
+
+function formAcceso() {
+  const u = inputEl("username", "Usuario", { minlength: "3", maxlength: "50" });
+  const e = inputEl("email", "Correo", { type: "email" });
+  const p = inputEl("password", "Contraseña (mín. 8)", { type: "password", minlength: "8", autocomplete: "new-password" });
+  const rol = el("select", {}, el("option", { value: "Trabajador" }, "Trabajador"), el("option", { value: "Administrador" }, "Administrador"));
+  return {
+    nodes: [u.label, e.label, p.label, el("label", {}, "Rol", rol)],
+    valor: () => ({ username: u.input.value.trim(), email: e.input.value.trim(), password: p.input.value, rol: rol.value }),
+  };
+}
+
+async function refrescarMatriz() {
+  try { state.matrices = await Api.get("/matriz/ciclos"); } catch (_) { /* se conserva la lista previa */ }
+  await load();
+}
+
+async function openPersonal() {
+  let lista;
+  try { lista = await Api.get("/trabajadores?limit=500"); } catch (e) { return toast(e.message, true); }
+  const accion = (texto, fn, cls = "") => el("button", { class: `btn ${cls}`, type: "button", onclick: fn }, texto);
+  const filas = lista.map((t) => el("tr", {},
+    el("td", {}, `${t.nombres} ${t.apellidos}`, el("br"), el("small", {}, t.documento)),
+    el("td", {}, el("span", { class: "badge " + (t.activo ? "ok" : "off") }, t.activo ? "Activo" : "De baja")),
+    el("td", {}, t.tiene_usuario ? "Con acceso" : "Sin acceso"),
+    el("td", {}, el("div", { class: "row-actions" }, ...(t.activo
+      ? [
+          t.tiene_usuario ? accion("Quitar acceso", () => openQuitarAcceso(t)) : accion("Dar acceso", () => openDarAcceso(t)),
+          accion("Dar de baja", () => bajaFlow(t), "danger"),
+        ]
+      : [accion("Reactivar", async () => {
+          try { await Api.patch(`/trabajadores/${t.id}`, { activo: true }); toast("Trabajador reactivado"); openPersonal(); }
+          catch (e) { toast(e.message, true); }
+        })]))),
+  ));
+  openDialog(
+    el("h2", {}, "Personal"),
+    el("div", { class: "actions", style: "justify-content:space-between" },
+      el("span", { class: "muted" }, `${lista.length} personas`),
+      accion("＋ Nuevo trabajador", () => openNuevoTrabajador(openPersonal), "primary")),
+    el("table", { class: "personal-table" },
+      el("thead", {}, el("tr", {}, el("th", {}, "Nombre"), el("th", {}, "Estado"), el("th", {}, "Acceso"), el("th", {}, ""))),
+      el("tbody", {}, filas)),
+    el("div", { class: "actions" }, cancelBtn()),
+  );
+  $("dlg").classList.add("wide");
+}
+
+function openNuevoTrabajador(volver) {
+  const doc = inputEl("documento", "Documento", { required: "", maxlength: "30" });
+  const nom = inputEl("nombres", "Nombres", { required: "", maxlength: "100" });
+  const ape = inputEl("apellidos", "Apellidos", { required: "", maxlength: "100" });
+  const chk = el("input", { type: "checkbox" });
+  const acceso = formAcceso();
+  const cont = el("div", { class: "hidden", style: "display:grid;gap:.7rem" }, ...acceso.nodes);
+  chk.addEventListener("change", () => cont.classList.toggle("hidden", !chk.checked));
+  openDialog(
+    el("h2", {}, "Nuevo trabajador"),
+    doc.label, nom.label, ape.label,
+    el("label", { style: "display:flex;gap:.5rem;align-items:center" }, chk, "Crear acceso al sistema"),
+    cont,
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: volver }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        const body = { documento: doc.input.value.trim(), nombres: nom.input.value.trim(), apellidos: ape.input.value.trim() };
+        if (chk.checked) body.usuario = acceso.valor();
+        try { await Api.post("/trabajadores", body); toast("Trabajador creado"); volver(); }
+        catch (e) { toast(e.message, true); }
+      } }, "Crear")),
+  );
+}
+
+function openDarAcceso(t) {
+  const acceso = formAcceso();
+  openDialog(
+    el("h2", {}, `Dar acceso a ${t.nombres} ${t.apellidos}`),
+    ...acceso.nodes,
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: openPersonal }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try { await Api.post(`/trabajadores/${t.id}/usuario`, acceso.valor()); toast("Acceso creado"); openPersonal(); }
+        catch (e) { toast(e.message, true); }
+      } }, "Crear acceso")),
+  );
+}
+
+function openQuitarAcceso(t) {
+  openDialog(
+    el("h2", {}, `Quitar acceso a ${t.nombres} ${t.apellidos}`),
+    el("p", {}, "Se elimina su usuario y contraseña. La persona y su historial en la matriz se conservan."),
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: openPersonal }, "Volver"),
+      el("button", { class: "btn danger", type: "button", onclick: async () => {
+        try { await Api.del(`/trabajadores/${t.id}/usuario`); toast("Acceso eliminado"); openPersonal(); }
+        catch (e) { toast(e.message, true); }
+      } }, "Quitar acceso")),
+  );
+}
+
+// Baja: si la persona está en la matriz se advierte y se exige crear o elegir a quien la reemplaza.
+async function bajaFlow(t) {
+  const nombre = `${t.nombres} ${t.apellidos}`;
+  let imp;
+  try { imp = await Api.get(`/trabajadores/${t.id}/impacto`); } catch (e) { return toast(e.message, true); }
+  const terminar = async (qs, msg) => {
+    try {
+      await Api.del(`/trabajadores/${t.id}${qs}`);
+      toast(msg);
+      refrescarMatriz();
+      openPersonal();
+    } catch (e) { toast(e.message, true); }
+  };
+  const volver = el("button", { class: "btn", type: "button", onclick: openPersonal }, "Volver");
+
+  if (!imp.en_matriz) {
+    return openDialog(
+      el("h2", {}, `Dar de baja a ${nombre}`),
+      el("p", {}, "Quedará inactivo y se bloqueará su acceso; su historial se conserva." +
+        (imp.asignaciones_futuras ? ` Se quitarán ${imp.asignaciones_futuras} turnos futuros.` : "") +
+        (imp.reemplazos_activos ? ` Se anularán ${imp.reemplazos_activos} reemplazos vigentes.` : "")),
+      el("div", { class: "actions" }, volver,
+        el("button", { class: "btn danger", type: "button", onclick: () => terminar("", "Trabajador dado de baja") }, "Dar de baja")),
+    );
+  }
+
+  const esTitular = imp.posiciones.some((p) => p.rol === "titular");
+  let candidatos = [];
+  try { candidatos = (await Api.get("/trabajadores?activo=true&limit=500")).filter((x) => x.id !== t.id); }
+  catch (e) { return toast(e.message, true); }
+  const enCiclo = new Set();
+  (state.data?.ciclo?.participantes || []).forEach((p) => { enCiclo.add(p.trabajador.id); if (p.relevo) enCiclo.add(p.relevo.id); });
+  const sel = el("select", {}, el("option", { value: "" }, "— Elige quién lo reemplaza —"),
+    ...candidatos.filter((x) => !enCiclo.has(x.id)).map((x) => el("option", { value: x.id }, `${x.nombres} ${x.apellidos}`)));
+
+  const doc = inputEl("documento", "Documento", { maxlength: "30" });
+  const nom = inputEl("nombres", "Nombres", { maxlength: "100" });
+  const ape = inputEl("apellidos", "Apellidos", { maxlength: "100" });
+  const nuevo = el("details", { class: "nuevo" }, el("summary", {}, "＋ Crear un trabajador nuevo como reemplazo"),
+    doc.label, nom.label, ape.label,
+    el("button", { class: "btn", type: "button", onclick: async () => {
+      try {
+        const n = await Api.post("/trabajadores", { documento: doc.input.value.trim(), nombres: nom.input.value.trim(), apellidos: ape.input.value.trim() });
+        const op = el("option", { value: n.id }, `${n.nombres} ${n.apellidos}`);
+        sel.append(op);
+        sel.value = String(n.id);
+        nuevo.open = false;
+        toast("Trabajador creado y seleccionado como reemplazo");
+      } catch (e) { toast(e.message, true); }
+    } }, "Crear y seleccionar"));
+
+  const sinRelevo = el("input", { type: "checkbox" });
+  openDialog(
+    el("h2", {}, `Dar de baja a ${nombre}`),
+    el("div", { class: "warn" },
+      `⚠ ${t.nombres} está en la matriz. Si sale sin reemplazo, los turnos quedan sin cubrir:`,
+      el("ul", {}, imp.posiciones.map((p) => el("li", {},
+        `${p.ciclo_nombre}: ` + (p.rol === "titular" ? `titular (fase ${p.fase})` : `relevo de ${p.titular}`)))),
+      imp.asignaciones_futuras ? el("div", {}, `Tiene ${imp.asignaciones_futuras} turnos futuros.`) : null,
+      imp.reemplazos_activos ? el("div", {}, `Tiene ${imp.reemplazos_activos} reemplazos vigentes (se anularán).`) : null),
+    el("label", {}, "Reemplazo", sel),
+    nuevo,
+    esTitular ? null : el("label", { style: "display:flex;gap:.5rem;align-items:center" }, sinRelevo, "Dejar el puesto de relevo sin cubrir"),
+    el("div", { class: "actions" }, volver,
+      el("button", { class: "btn danger", type: "button", onclick: () => {
+        if (sel.value) return terminar(`?reemplazo_id=${sel.value}`, "Reemplazo aplicado y trabajador dado de baja");
+        if (!esTitular && sinRelevo.checked) return terminar("?sin_relevo=true", "Trabajador dado de baja (relevo sin cubrir)");
+        toast("Elige o crea a quien lo reemplaza", true);
+      } }, "Reemplazar y dar de baja")),
+  );
+}
+
+// Aviso en la matriz si algún titular o relevo está dado de baja.
+function renderAlertas() {
+  const al = $("alertas");
+  const faltan = [];
+  (state.data?.ciclo?.participantes || []).forEach((p) => {
+    if (!p.trabajador.activo) faltan.push(`${p.trabajador.nombres} (titular, fase ${p.fase})`);
+    if (p.relevo && !p.relevo.activo) faltan.push(`${p.relevo.nombres} (relevo de ${p.trabajador.nombres})`);
+  });
+  al.classList.toggle("hidden", faltan.length === 0);
+  al.textContent = faltan.length
+    ? `⚠ Hay personas dadas de baja en la matriz: ${faltan.join("; ")}. ` +
+      (state.isAdmin ? "Reemplázalas desde «Personal»." : "Avisa a un administrador.")
+    : "";
+}
+
 // ---- Arranque ----
 function bindSegmented(id, key) {
   $(id).addEventListener("click", (e) => {
@@ -308,6 +498,9 @@ document.addEventListener("DOMContentLoaded", () => {
   $("next").onclick = () => shift(1);
   $("today").onclick = () => { state.anchor = new Date(); load(); };
   $("generate").onclick = openGenerar;
+  $("personal").onclick = openPersonal;
+  $("dlg-form").addEventListener("submit", (e) => e.preventDefault());
+  $("dlg").addEventListener("close", () => $("dlg").classList.remove("wide"));
   $("logout").onclick = () => { Api.setToken(null); location.reload(); };
   $("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();

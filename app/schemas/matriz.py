@@ -39,6 +39,7 @@ class PersonaMini(BaseModel):
     id: int
     nombres: str
     apellidos: str
+    activo: bool = True
 
 
 class ParticipanteOut(BaseModel):

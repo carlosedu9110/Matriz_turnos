@@ -1,4 +1,4 @@
-"""Modelo de Trabajador (información laboral/personal, independiente de credenciales de acceso)."""
+﻿"""Modelo de Trabajador (información laboral/personal, independiente de credenciales de acceso)."""
 from datetime import date
 
 from sqlalchemy import Date, ForeignKey, String
@@ -28,6 +28,10 @@ class Trabajador(Base):
     usuario: Mapped["Usuario"] = relationship(
         back_populates="trabajador", uselist=False, cascade="all, delete-orphan"
     )
+
+    @property
+    def tiene_usuario(self) -> bool:
+        return self.usuario is not None
 
     def __repr__(self) -> str:
         return f"<Trabajador id={self.id} documento={self.documento!r}>"
