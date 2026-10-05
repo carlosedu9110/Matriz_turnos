@@ -119,3 +119,13 @@ def test_frontend_servido(client):
     r = client.get("/app/")
     assert r.status_code == 200 and "Matriz de turnos" in r.text
     assert client.get("/app/js/app.js").status_code == 200
+
+
+def test_plantilla_exacta_segun_matriz_real():
+    M, T, N = "Mañana", "Tarde", "Noche"
+    assert PLANTILLA_BASE == {
+        1: {2: M, 3: M, 4: M, 5: M, 6: M},
+        2: {0: T, 1: T, 3: T, 4: T, 5: T},
+        3: {0: M, 1: M, 2: T, 4: N, 5: N, 6: N},
+        4: {0: N, 1: N, 2: N, 3: N, 6: T},
+    }
