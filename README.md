@@ -57,27 +57,42 @@ Ver `docs/ARCHITECTURE.md` para la documentación completa de arquitectura.
 
 ### Pasos
 
-```bash
-# 1. Crear y activar entorno virtual
+No es necesario activar el entorno virtual (en Windows, `Activate.ps1` puede estar bloqueado por
+política de grupo). Ejecuta todo desde la raíz del proyecto usando el Python del entorno por su ruta.
+
+**Windows (PowerShell):**
+
+```powershell
+# 1. Crear entorno virtual
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # Linux/Mac
 
 # 2. Instalar dependencias
-pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
 # 3. Configurar variables de entorno
-copy .env.example .env        # Windows
-# cp .env.example .env         # Linux/Mac
+copy .env.example .env
 # Editar .env con las credenciales de tu base de datos MySQL y SECRET_KEY
 
 # 4. Crear el esquema de base de datos y datos base (roles + admin)
-python -m app.db.init_db
+.\.venv\Scripts\python.exe -m app.db.init_db
 
 # 5. Levantar el servidor de desarrollo
-uvicorn app.main:app --reload
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
+**Linux/macOS:**
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/python -m app.db.init_db
+.venv/bin/python -m uvicorn app.main:app --reload
+```
+
+Opcional: si la política de tu equipo lo permite, puedes activar el entorno
+(`.\.venv\Scripts\Activate.ps1` en Windows, `source .venv/bin/activate` en Linux/macOS) y usar
+`python ...` directamente en lugar de la ruta completa.
 La API queda disponible en `http://localhost:8000` (docs interactivas en `/docs`).
 
 Usuario administrador inicial sembrado por `init_db`: `admin` / `Admin123!` (cambiar en producción).
