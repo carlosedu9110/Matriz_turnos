@@ -61,3 +61,21 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .4rem; }
 .toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: .6rem 1rem; border-radius: 8px; z-index: 10; }
 .toast.err { background: var(--danger); }
+
+/* Semanas apiladas hacia abajo, estilo Excel */
+.weeks { margin: 0 1.2rem 2rem; display: grid; gap: 1.1rem; }
+.weeks table.week { background: var(--card); border: 1px solid #1f2a6b; border-radius: 4px; overflow: hidden; }
+table.week thead th { background: #2b3490; color: #fff; position: static; border-color: #1f2a6b; }
+table.week thead th small { color: #cdd3ff; }
+table.week thead th.today { background: #ffe600; color: #111; }
+table.week thead th.today small { color: #333; }
+table.week thead th.weekend { background: #3a44a8; }
+table.week th.rowhead, table.week td.rowhead { position: static; background: #2b3490; color: #fff; min-width: 120px; border-color: #1f2a6b; }
+table.week td.rowhead small { color: #cdd3ff; }
+table.week td { border-color: #cfd4dc; }
+.person-cell { padding: 2px; height: 34px; }
+.person { text-align: center; font-weight: 600; padding: .35rem .3rem; border-radius: 3px; margin: 1px 0; cursor: default; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.person.clickable { cursor: pointer; }
+.person.cover { outline: 2px dashed rgba(0,0,0,.6); outline-offset: -2px; }
+.person.manual::after { content: " ✎"; }
+.month-banner { background: #70ad47; color: #fff; text-align: center; font-weight: 700; font-size: 1.1rem; padding: .5rem; text-transform: capitalize; }

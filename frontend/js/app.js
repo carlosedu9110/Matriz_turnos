@@ -1,4 +1,4 @@
-// Matriz de turnos - frontend vanilla. Todo el texto dinámico se inserta con textContent (sin innerHTML).
+﻿// Matriz de turnos - frontend vanilla. Todo el texto dinámico se inserta con textContent (sin innerHTML).
 const $ = (id) => document.getElementById(id);
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -32,13 +32,16 @@ function toast(msg, isErr = false) {
   toast.h = setTimeout(() => t.classList.add("hidden"), 3500);
 }
 
+// Rango visible: semanas completas (lunes a domingo). El mes muestra todas sus semanas, una debajo de otra.
 function range() {
   if (state.scope === "week") {
     const s = mondayOf(state.anchor);
     return [s, addDays(s, 6)];
   }
   const a = state.anchor;
-  return [new Date(a.getFullYear(), a.getMonth(), 1), new Date(a.getFullYear(), a.getMonth() + 1, 0)];
+  const primero = new Date(a.getFullYear(), a.getMonth(), 1);
+  const ultimo = new Date(a.getFullYear(), a.getMonth() + 1, 0);
+  return [mondayOf(primero), addDays(mondayOf(ultimo), 6)];
 }
 
 function days(desde, hasta) {
@@ -47,10 +50,24 @@ function days(desde, hasta) {
   return out;
 }
 
+function weeksOf(dias) {
+  const out = [];
+  for (let i = 0; i < dias.length; i += 7) out.push(dias.slice(i, i + 7));
+  return out;
+}
+
+// Color estable por persona (como en el Excel): se deriva del id del trabajador.
+const PALETA = ["#548235", "#F4B183", "#00B0F0", "#FF0000", "#8E7CC3", "#E6B800", "#2E9E9E", "#D56AA0", "#7F7F7F", "#C55A11"];
+const colorPersona = (id) => PALETA[id % PALETA.length];
+const textoPersona = (id) => (["#F4B183", "#E6B800", "#00B0F0"].includes(colorPersona(id)) ? "#111" : "#fff");
+
 async function load() {
   const [desde, hasta] = range();
+  const a = state.anchor;
   $("range-label").textContent =
-    state.scope === "week" ? `${fmtShort(desde)} – ${fmtShort(hasta)} ${hasta.getFullYear()}` : `${MESES[desde.getMonth()]} ${desde.getFullYear()}`;
+    state.scope === "week"
+      ? `${fmtShort(desde)} – ${fmtShort(hasta)} ${hasta.getFullYear()}`
+      : `${MESES[a.getMonth()]} ${a.getFullYear()}`;
   if (!state.matriz) { state.data = null; render(); return; }
   try {
     state.data = await Api.get(`/matriz?desde=${iso(desde)}&hasta=${iso(hasta)}&matriz=${encodeURIComponent(state.matriz)}`);
@@ -63,8 +80,8 @@ async function load() {
 
 function render() {
   const d = state.data;
-  const grid = $("grid");
-  grid.replaceChildren();
+  const cont = $("grid-wrap");
+  cont.replaceChildren();
   $("legend").replaceChildren();
   const vacio = !state.matriz || !d || d.celdas.length === 0;
   $("empty").classList.toggle("hidden", !vacio);
@@ -73,17 +90,39 @@ function render() {
     : "No hay turnos en este periodo." + (state.isAdmin ? " Usa «Generar turnos»." : "");
   if (!d) return;
 
-  $("legend").append(
-    ...d.tipos_turno.map((t) => el("span", {}, el("i", { class: "dot", style: `background:${t.color || "#888"}` }), `${t.nombre} ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`)),
-    el("span", {}, el("i", { class: "dot", style: "background:#888;outline:2px dashed #444" }), "Cobertura (reemplazo)"),
-  );
+  const leyenda = [];
+  if (state.layout === "turno") {
+    const vistos = new Map();
+    d.celdas.forEach((c) => vistos.set(c.trabajador.id, c.trabajador));
+    [...vistos.values()]
+      .sort((x, y) => x.nombres.localeCompare(y.nombres))
+      .forEach((p) => leyenda.push(el("span", {}, el("i", { class: "dot", style: `background:${colorPersona(p.id)}` }), p.nombres)));
+  } else {
+    d.tipos_turno.forEach((t) =>
+      leyenda.push(el("span", {}, el("i", { class: "dot", style: `background:${t.color || "#888"}` }), `${t.nombre} ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`)));
+  }
+  leyenda.push(el("span", {}, el("i", { class: "dot", style: "background:#888;outline:2px dashed #444" }), "↪ Cobertura (reemplazo)"));
+  $("legend").append(...leyenda);
   if (vacio) return;
+
   const dias = days(parse(d.desde), parse(d.hasta));
-  state.layout === "turno" ? renderTurno(grid, d, dias) : renderPersona(grid, d, dias);
+  let mesActual = null;
+  for (const semana of weeksOf(dias)) {
+    // Banner cuando cambia el mes (como en el Excel).
+    const mes = semana[3]; // jueves: mes al que pertenece la mayoría de la semana
+    const clave = `${mes.getFullYear()}-${mes.getMonth()}`;
+    if (state.scope === "month" && clave !== mesActual) {
+      mesActual = clave;
+      cont.append(el("div", { class: "month-banner" }, `${MESES[mes.getMonth()]} ${mes.getFullYear()}`));
+    }
+    const tabla = el("table", { class: "week" });
+    state.layout === "turno" ? renderTurno(tabla, d, semana) : renderPersona(tabla, d, semana);
+    cont.append(tabla);
+  }
 }
 
 function dayCls(day) {
-  return (day.getDay() === 0 || day.getDay() === 6 ? "weekend " : "") + (iso(day) === iso(new Date()) ? "today" : "");
+  return iso(day) === iso(new Date()) ? "today" : day.getDay() === 0 || day.getDay() === 6 ? "weekend" : "";
 }
 
 function headRow(first, dias) {
@@ -100,25 +139,29 @@ function clickable(node, celda) {
   return node;
 }
 
-function renderTurno(grid, d, dias) {
-  const color = Object.fromEntries(d.tipos_turno.map((t) => [t.id, t.color || "#888"]));
+function renderTurno(tabla, d, dias) {
   const idx = {};
   for (const c of d.celdas) (idx[`${c.fecha}|${c.tipo_turno_id}`] ||= []).push(c);
-  grid.append(headRow("Turno", dias), el("tbody", {}, d.tipos_turno.map((t) =>
+  tabla.append(headRow("TIME / DATE", dias), el("tbody", {}, d.tipos_turno.map((t) =>
     el("tr", {},
-      el("td", { class: "rowhead" }, t.nombre, el("small", {}, `${hhmm(t.hora_inicio)} – ${hhmm(t.hora_fin)}`)),
-      dias.map((day) => el("td", { class: dayCls(day) }, (idx[`${iso(day)}|${t.id}`] || []).map((c) => {
-        const chip = el("span", {
-          class: "chip" + (c.es_reemplazo ? " cover" : "") + (c.manual ? " manual" : ""),
-          style: `background:${color[t.id]}`,
-          title: c.es_reemplazo ? `${c.trabajador.nombres} cubre a ${c.titular.nombres}` : `${c.trabajador.nombres} ${c.trabajador.apellidos}`,
-        }, (c.es_reemplazo ? "↪ " : "") + c.trabajador.nombres);
-        return clickable(chip, c);
-      }))),
+      el("td", { class: "rowhead" }, `${hhmm(t.hora_inicio)} – ${hhmm(t.hora_fin)}`, el("small", {}, t.nombre)),
+      dias.map((day) => {
+        const celdas = idx[`${iso(day)}|${t.id}`] || [];
+        const td = el("td", { class: "person-cell " + dayCls(day) });
+        celdas.forEach((c) => {
+          const chip = el("div", {
+            class: "person" + (c.es_reemplazo ? " cover" : "") + (c.manual ? " manual" : ""),
+            style: `background:${colorPersona(c.trabajador.id)};color:${textoPersona(c.trabajador.id)}`,
+            title: c.es_reemplazo ? `${c.trabajador.nombres} cubre a ${c.titular.nombres}` : `${c.trabajador.nombres} ${c.trabajador.apellidos}`,
+          }, (c.es_reemplazo ? "↪ " : "") + c.trabajador.nombres);
+          td.append(clickable(chip, c));
+        });
+        return td;
+      }),
     ))));
 }
 
-function renderPersona(grid, d, dias) {
+function renderPersona(tabla, d, dias) {
   const tipos = Object.fromEntries(d.tipos_turno.map((t) => [t.id, t]));
   const personas = [];
   const visto = new Set();
@@ -132,7 +175,7 @@ function renderPersona(grid, d, dias) {
     if (c.titular) (idx[`${c.titular.id}|${c.fecha}`] ||= []).push({ c, ausente: true });
     (idx[`${c.trabajador.id}|${c.fecha}`] ||= []).push({ c, ausente: false });
   }
-  grid.append(headRow("Persona", dias), el("tbody", {}, personas.map((p) =>
+  tabla.append(headRow("Persona", dias), el("tbody", {}, personas.map((p) =>
     el("tr", {},
       el("td", { class: "rowhead", title: `${p.nombres} ${p.apellidos}` }, p.nombres, p.nota ? el("small", {}, p.nota) : null),
       dias.map((day) => el("td", { class: dayCls(day) }, (idx[`${p.id}|${iso(day)}`] || []).map(({ c, ausente }) => {

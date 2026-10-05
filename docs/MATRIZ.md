@@ -32,7 +32,7 @@ pertenece al día en que empieza.
 
 Abre **http://localhost:8000/app/** e ingresa con un usuario (ej. `admin`).
 
-- **Semana / Mes** y **Por turno / Por persona**.
+- **Semana / Mes**: cada semana es un bloque (lunes a domingo) y las semanas van una debajo de otra, como en el Excel.`n- **Por turno** (color por persona) / **Por persona** (color por turno).
 - Administrador: clic en un turno → **registrar ausencia** (propone al relevo) o **anular el reemplazo**.
 - Administrador: **Generar turnos** aplica el ciclo a un rango de fechas (no pisa cambios manuales).
 - Celda rayada = titular ausente; borde punteado con ↪ = cobertura.
