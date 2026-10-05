@@ -126,6 +126,7 @@ ver [`docs/TESTING.md`](docs/TESTING.md).
 
 - `docs/ARCHITECTURE.md` - Diseño completo del sistema (Fase 1)
 - `docs/DATABASE.md` - Esquema de base de datos y diagrama de relaciones
+- `docs/MATRIZ.md` - Matriz de turnos (ciclo de 4 semanas, `matriz_analistas`) y frontend en `/app`
 - `docs/CARGA_MATRIZ.md` - Guía para cargar trabajadores, cargos, turnos y reemplazos (Fase 2)
 - `docs/TESTING.md` - Guía de pruebas
 

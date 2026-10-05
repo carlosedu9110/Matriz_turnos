@@ -95,6 +95,15 @@ Además: CHECK `trabajador_ausente_id <> trabajador_reemplazo_id` e índice (ree
 - `Usuario` N—M `Rol` a través de `usuario_rol`
 - `Reemplazo` N—1 `Trabajador` (ausente), N—1 `Trabajador` (reemplazante), N—1 `TipoTurno` (opcional)
 
+### Matriz de turnos (Fase 3)
+
+- `ciclos_turno`: `codigo` único (ej. `matriz_analistas`), `nombre` único, `fecha_ancla` (lunes), `activo`.
+- `ciclo_participantes`: `ciclo_id`, `trabajador_id` (titular), `relevo_id`, `fase` 1-4; únicos (ciclo, fase) y (ciclo, trabajador).
+- `ciclo_plantilla`: (`ciclo_id`, `semana` 1-4, `dia_semana` 0-6) → `tipo_turno_id`; sin fila = descanso.
+- `asignaciones`: (`trabajador_id`, `fecha`) único → `tipo_turno_id`; `manual` protege cambios puntuales.
+
+Detalle en `docs/MATRIZ.md`.
+
 ## Diagrama de relaciones
 
 El diagrama separa dos conceptos que suelen confundirse:

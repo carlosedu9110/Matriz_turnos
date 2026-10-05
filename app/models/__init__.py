@@ -1,6 +1,7 @@
-"""Paquete de modelos ORM (SQLAlchemy)."""
+﻿"""Paquete de modelos ORM (SQLAlchemy)."""
 from app.models.area import Area
 from app.models.cargo import Cargo
+from app.models.ciclo import Asignacion, CicloParticipante, CicloPlantilla, CicloTurno
 from app.models.reemplazo import Reemplazo
 from app.models.rol import Rol
 from app.models.tipo_turno import TipoTurno
@@ -10,7 +11,11 @@ from app.models.usuario_rol import usuario_rol
 
 __all__ = [
     "Area",
+    "Asignacion",
     "Cargo",
+    "CicloParticipante",
+    "CicloPlantilla",
+    "CicloTurno",
     "Reemplazo",
     "Rol",
     "TipoTurno",

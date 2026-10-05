@@ -1,4 +1,4 @@
-"""Script para crear el esquema inicial y sembrar datos base (roles, admin).
+﻿"""Script para crear el esquema inicial y sembrar datos base (roles, admin).
 
 Uso:
     python -m app.db.init_db
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.db.session import Base, SessionLocal, engine
 from app.models import Rol, Trabajador, Usuario  # noqa: F401 (necesarios para metadata)
+from app.services.matriz_service import sembrar_tipos_turno
 
 ROLES_BASE = ["Administrador", "Trabajador"]
 
@@ -57,6 +58,7 @@ def main() -> None:
     try:
         seed_roles(db)
         seed_admin_user(db)
+        sembrar_tipos_turno(db)
     finally:
         db.close()
     print("Esquema creado y datos base sembrados correctamente.")

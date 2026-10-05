@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matriz de turnos</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <section id="login-view" class="login hidden">
+    <form id="login-form" class="card">
+      <h1>Matriz de turnos</h1>
+      <p class="muted">Inicia sesión para ver la matriz</p>
+      <label>Usuario <input name="username" autocomplete="username" required></label>
+      <label>Contraseña <input name="password" type="password" autocomplete="current-password" required></label>
+      <p id="login-error" class="error"></p>
+      <button class="btn primary" type="submit">Ingresar</button>
+    </form>
+  </section>
+
+  <section id="app-view" class="hidden">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Matriz de turnos</h1>
+        <select id="matriz-select" title="Matriz"></select>
+      </div>
+      <div class="user">
+        <span id="user-label"></span>
+        <button id="logout" class="btn">Salir</button>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <div class="group">
+        <button id="prev" class="btn" title="Anterior">‹</button>
+        <button id="today" class="btn">Hoy</button>
+        <button id="next" class="btn" title="Siguiente">›</button>
+        <strong id="range-label"></strong>
+      </div>
+      <div class="group">
+        <div class="segmented" id="scope">
+          <button data-v="week" class="active">Semana</button>
+          <button data-v="month">Mes</button>
+        </div>
+        <div class="segmented" id="layout">
+          <button data-v="turno" class="active">Por turno</button>
+          <button data-v="persona">Por persona</button>
+        </div>
+        <button id="generate" class="btn primary admin-only hidden">Generar turnos</button>
+      </div>
+    </div>
+
+    <div id="legend" class="legend"></div>
+    <p id="empty" class="muted hidden" style="padding:0 1.2rem">No hay turnos en este periodo. Un administrador puede usar «Generar turnos».</p>
+    <div id="grid-wrap" class="grid-wrap"><table id="grid"></table></div>
+  </section>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form"></form>
+  </dialog>
+  <div id="toast" class="toast hidden"></div>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
