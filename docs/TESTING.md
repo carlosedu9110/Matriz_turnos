@@ -1,4 +1,4 @@
-# Guía paso a paso para ejecutar las pruebas
+﻿# Guía paso a paso para ejecutar las pruebas
 
 Esta guía explica cómo preparar el proyecto y ejecutar las pruebas automatizadas de la Fase 1.
 Las pruebas usan una base de datos SQLite temporal en memoria, por lo que **no es necesario tener
@@ -31,64 +31,75 @@ git checkout carlosedu9110-fase1-base-bd-auth
 ## 3. Crear un entorno virtual
 
 El entorno virtual mantiene las dependencias del proyecto separadas de las de tu computador.
+**No es necesario activarlo**: basta con llamar al Python del entorno por su ruta. Así se evita el
+error de `Activate.ps1` cuando una política de grupo (Group Policy) bloquea la ejecución de scripts
+en PowerShell (no cambies la política del sistema).
 
 ### Windows PowerShell
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-Si PowerShell bloquea la activación por política de ejecución, ejecuta PowerShell como usuario
-normal y usa:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-Después, vuelve a ejecutar:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
 ```
 
 ### Linux/macOS
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
 ```
-
-Cuando el entorno está activo, normalmente aparece `(.venv)` al comienzo de la línea de comandos.
 
 ## 4. Instalar las dependencias
 
-Con el entorno virtual activo:
+Ejecuta siempre los comandos desde la carpeta raíz del proyecto (donde está `pyproject.toml`).
+
+Windows:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Linux/macOS:
 
 ```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
 Esto instala FastAPI, SQLAlchemy, PyMySQL, PyJWT, bcrypt, pytest y las demás dependencias del proyecto.
 
 ## 5. Ejecutar todas las pruebas
 
-Desde la carpeta raíz del proyecto:
+Comando soportado, desde la carpeta raíz del proyecto:
 
-```bash
-python -m pytest -v
+Windows:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -v
 ```
 
-También se puede usar directamente:
+Linux/macOS:
 
 ```bash
-pytest -v
+.venv/bin/python -m pytest -v
 ```
 
-La forma `python -m pytest` es recomendable porque garantiza que se usa el pytest instalado dentro
-del entorno virtual activo.
+Para un archivo concreto: `.\.venv\Scripts\python.exe -m pytest tests\test_models.py -v`.
 
+> **No ejecutes los archivos de `tests/` con "Run Python File" ni con `python tests\test_models.py`.**
+> Los tests son módulos de pytest, no scripts: ejecutados así, Python solo añade la carpeta `tests/`
+> al path y falla con `ModuleNotFoundError: No module named 'app'`. La configuración
+> (`pythonpath = ["."]` en `pyproject.toml`) solo aplica cuando se lanza con pytest.
+
+### Usar VS Code
+
+1. `Ctrl+Shift+P` → **Python: Select Interpreter** → elige `.venv\Scripts\python.exe`.
+2. Abre el panel **Testing** (icono del matraz) → **Configure Python Tests** → **pytest** → carpeta `tests`.
+3. Ejecuta las pruebas desde el panel Testing (botón ▶), no con el botón "Run Python File".
+
+### Opcional: activar el entorno
+
+Solo si tu equipo lo permite (en Linux/macOS: `source .venv/bin/activate`; en Windows:
+`.\.venv\Scripts\Activate.ps1`). Entonces puedes usar `python -m pytest -v` directamente.
 ## 6. Resultado esperado
 
 La salida debe terminar de forma similar a:
@@ -177,15 +188,14 @@ Activa el entorno virtual y reinstala:
 python -m pip install -r requirements.txt
 ```
 
-### Error al activar `.venv` en Windows
+### Error al activar `.venv` en Windows (PermissionDenied / ExecutionPolicyOverride)
 
-Ejecuta:
+Una política de grupo puede impedir `Activate.ps1` y `Set-ExecutionPolicy`. No hace falta activar: usa
+`.\.venv\Scripts\python.exe -m pytest -v`. No modifiques la política del sistema.
 
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
+### `ModuleNotFoundError: No module named 'app'`
 
-Luego vuelve a activar el entorno virtual.
+Ocurre al ejecutar un archivo de `tests/` como script ("Run Python File"). Usa `python -m pytest` desde la raíz.
 
 ### Error de `email-validator`
 
@@ -200,13 +210,7 @@ python -m pip install -r requirements.txt
 Verifica que el comando se está ejecutando desde la carpeta raíz, la misma donde están
 `pyproject.toml`, `requirements.txt`, `app/` y `tests/`.
 
-## 11. Desactivar el entorno virtual
+## 11. Al terminar
 
-Cuando termines:
-
-```bash
-deactivate
-```
-
-Para repetir las pruebas en el futuro solo necesitas volver a la carpeta del proyecto, activar
-`.venv` y ejecutar `python -m pytest -v`.
+Si activaste el entorno virtual, ejecuta `deactivate`. Para repetir las pruebas basta volver a la raíz y ejecutar
+`.\.venv\Scripts\python.exe -m pytest -v`.

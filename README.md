@@ -1,4 +1,4 @@
-# Sistema de Gestión de Turnos - Matriz Turnos 24/7
+﻿# Sistema de Gestión de Turnos - Matriz Turnos 24/7
 
 ## Descripción
 
@@ -98,8 +98,9 @@ Ver `.env.example` para el listado completo. Las más relevantes:
 
 ### Pruebas
 
-```bash
-pytest
+```powershell
+# Desde la raíz, sin activar el venv (Windows)
+.\.venv\Scripts\python.exe -m pytest -v
 ```
 
 Las pruebas usan una base de datos SQLite en memoria (no requieren MySQL en ejecución).
