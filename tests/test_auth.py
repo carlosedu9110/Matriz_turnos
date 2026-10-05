@@ -40,3 +40,11 @@ def test_me_with_valid_token(client, sample_user):
 def test_me_with_invalid_token(client):
     response = client.get("/auth/me", headers={"Authorization": "Bearer not-a-real-token"})
     assert response.status_code == 401
+
+
+def test_token_form_login_for_swagger(client, sample_user):
+    ok = client.post("/auth/token", data={"username": "apere", "password": "Secret123!"})
+    assert ok.status_code == 200
+    assert ok.json()["token_type"] == "bearer"
+    bad = client.post("/auth/token", data={"username": "apere", "password": "mala"})
+    assert bad.status_code == 401

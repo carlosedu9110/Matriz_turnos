@@ -1,5 +1,6 @@
-"""Endpoints de autenticación: login y usuario actual."""
+﻿"""Endpoints de autenticación: login y usuario actual."""
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_active_user
@@ -30,3 +31,10 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResp
 def read_current_user(current_user: Usuario = Depends(get_current_active_user)) -> Usuario:
     """Devuelve la información del usuario autenticado."""
     return current_user
+
+@router.post("/token", response_model=TokenResponse, include_in_schema=True)
+def login_form(
+    form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+) -> TokenResponse:
+    """Login con formulario OAuth2; lo usa el botón Authorize de Swagger (/docs)."""
+    return login(LoginRequest(username=form.username, password=form.password), db)

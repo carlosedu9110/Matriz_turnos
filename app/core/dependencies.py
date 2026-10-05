@@ -1,4 +1,4 @@
-"""Dependencias de FastAPI para autenticación y autorización basada en roles."""
+﻿"""Dependencias de FastAPI para autenticación y autorización basada en roles."""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWTError
@@ -8,7 +8,7 @@ from app.core.security import TOKEN_TYPE_ACCESS, decode_token
 from app.db.session import get_db
 from app.models.usuario import Usuario
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
 
 CREDENTIALS_EXCEPTION = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
