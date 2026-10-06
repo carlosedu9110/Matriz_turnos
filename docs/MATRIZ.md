@@ -94,3 +94,13 @@ Botón **Personal** (solo Administrador): lista a todas las personas y permite
 API: `GET /trabajadores/{id}/impacto`, `DELETE /trabajadores/{id}?reemplazo_id=N` (o `?sin_relevo=true`),
 `POST /trabajadores/{id}/usuario`, `DELETE /trabajadores/{id}/usuario`. Sin reemplazo, la baja de alguien en la matriz
 responde `409` con `codigo: EN_MATRIZ`. `PATCH` ya no permite `activo=false`: la baja siempre pasa por `DELETE`.
+
+## Datos reales cargados
+
+`python -m app.db.cargar_matriz_real` (idempotente) retira la demo y carga `matriz_analistas` con la alineación del
+Excel (semana del 12-oct-2026): **fase 1 Carlos, fase 2 Alexandra, fase 3 Jonathan, fase 4 Juan Pablo A**
+(`fecha_ancla` 14-sep-2026), turnos del 5-oct al 27-dic-2026, y el reemplazo de Maicol por Alexandra (12 y 13 oct).
+
+Pendiente de completar (se hace desde **Personal** o `PATCH /trabajadores/{id}`):
+- Documento y apellidos reales (hoy `PENDIENTE-…` / `(completar)`).
+- Relevos de Carlos, Jonathan y Juan Pablo A (solo Maicol, relevo de Alexandra, está identificado en el Excel).
