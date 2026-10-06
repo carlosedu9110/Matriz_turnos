@@ -93,6 +93,8 @@ cp .env.example .env
 Opcional: si la política de tu equipo lo permite, puedes activar el entorno
 (`.\.venv\Scripts\Activate.ps1` en Windows, `source .venv/bin/activate` en Linux/macOS) y usar
 `python ...` directamente en lugar de la ruta completa.
+Atajo (Windows): `.\iniciar.ps1` levanta el servidor sin activar el entorno. El frontend queda en `http://localhost:8000/app/`.
+
 La API queda disponible en `http://localhost:8000` (docs interactivas en `/docs`).
 
 Usuario administrador inicial sembrado por `init_db`: `admin` / `Admin123!` (cambiar en producción).
