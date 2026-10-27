@@ -1,4 +1,4 @@
-# Sistema de Gestión de Turnos - Matriz Turnos 24/7
+﻿# Sistema de Gestión de Turnos - Matriz Turnos 24/7
 
 ## Descripción
 
@@ -11,7 +11,7 @@ Aplicación web para la gestión integral de turnos, vacaciones, reemplazos y ho
 - ✅ Gestión de reemplazos
 - ✅ Registro y validación de horas extras
 - ✅ Cálculo automático según legislación colombiana
-- ✅ Roles y permisos (Administrador/Trabajador)
+- ✅ Roles y permisos (`Admin` / `Usuario final`), separados de los cargos (`Analista` / `Especialista` / `Admin`)
 - ✅ Auditoría completa de cambios
 - ✅ Reportes en Excel
 - ✅ Integración con calendario de festivos
@@ -50,14 +50,107 @@ Ver `docs/ARCHITECTURE.md` para la documentación completa de arquitectura.
 
 ## Instalación
 
-Ver `docs/INSTALLATION.md`
+### Requisitos
+
+- Python 3.11+
+- MySQL 8+ en ejecución (o compatible), con una base de datos y usuario creados
+
+### Pasos
+
+No es necesario activar el entorno virtual (en Windows, `Activate.ps1` puede estar bloqueado por
+política de grupo). Ejecuta todo desde la raíz del proyecto usando el Python del entorno por su ruta.
+
+**Windows (PowerShell):**
+
+```powershell
+# 1. Crear entorno virtual
+python -m venv .venv
+
+# 2. Instalar dependencias
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# 3. Configurar variables de entorno
+copy .env.example .env
+# Editar .env con las credenciales de tu base de datos MySQL y SECRET_KEY
+
+# 4. Crear el esquema de base de datos y datos base (roles + admin)
+.\.venv\Scripts\python.exe -m app.db.init_db
+
+# 5. Levantar el servidor de desarrollo
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+**Linux/macOS:**
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/python -m app.db.init_db
+.venv/bin/python -m uvicorn app.main:app --reload
+```
+
+Opcional: si la política de tu equipo lo permite, puedes activar el entorno
+(`.\.venv\Scripts\Activate.ps1` en Windows, `source .venv/bin/activate` en Linux/macOS) y usar
+`python ...` directamente en lugar de la ruta completa.
+Atajo (Windows): `.\iniciar.ps1` levanta el servidor sin activar el entorno. El frontend queda en `http://localhost:8000/app/`.
+
+La API queda disponible en `http://localhost:8000` (docs interactivas en `/docs`).
+
+El primer administrador de desarrollo que siembra `init_db` es `admin` / `Admin123!`. Para definir
+otro correo o contraseña inicial, establece `ADMIN_EMAIL` y `ADMIN_PASSWORD` en el entorno antes de
+crear el primer Admin. Si copias `.env.example`, reemplaza el valor de ejemplo `ADMIN_PASSWORD` antes
+de ejecutar `init_db`; cambia también `SECRET_KEY` y configura SMTP antes de usar el sistema en producción.
+
+### Usuarios, roles y correo
+
+- Solo el rol **Admin** gestiona usuarios, turnos y reemplazos. **Usuario final** consulta solo su
+  perfil y sus turnos. El cargo (`Analista`, `Especialista` o `Admin`) no concede permisos.
+- El Admin crea la cuenta con nombres, apellidos, correo, teléfono, cargo y rol; no elige ni ve una
+  contraseña. El usuario la configura desde el enlace de invitación enviado a su correo.
+- Para desarrollo local, `EMAIL_BACKEND=console` deja el enlace en la consola del servidor. Para
+  enviar invitaciones y recuperación de contraseña en producción, configura SMTP en `.env`; ver
+  `.env.example` y [`docs/USUARIOS.md`](docs/USUARIOS.md).
+- Para migrar datos existentes, ejecuta de nuevo `python -m app.db.init_db`: renombra los roles
+  anteriores a `Admin` / `Usuario final` y agrega los tres cargos.
+
+### Variables de entorno
+
+Ver `.env.example` para el listado completo. Las más relevantes:
+
+| Variable                       | Descripción                                              |
+|---------------------------------|-----------------------------------------------------------|
+| `DATABASE_URL`                  | URI SQLAlchemy completa (tiene prioridad sobre `DB_*`)     |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Datos de conexión MySQL individuales |
+| `SECRET_KEY`                     | Clave usada para firmar los JWT (cambiar en producción)    |
+| `JWT_ALGORITHM`                  | Algoritmo de firma JWT (por defecto `HS256`)               |
+| `ACCESS_TOKEN_EXPIRE_MINUTES`    | Vigencia del access token                                  |
+| `REFRESH_TOKEN_EXPIRE_DAYS`      | Vigencia del refresh token                                 |
+| `CORS_ORIGINS`                   | Orígenes permitidos, separados por coma                    |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`  | Credenciales del primer Admin; solo se aplican si no hay usuarios |
+| `EMAIL_BACKEND`                  | `console` para desarrollo; `smtp` para envío real            |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Credenciales y remitente del correo |
+| `FRONTEND_BASE_URL`              | URL usada para construir enlaces de invitación y recuperación |
+
+### Pruebas
+
+```powershell
+# Desde la raíz, sin activar el venv (Windows)
+.\.venv\Scripts\python.exe -m pytest -v
+```
+
+Las pruebas usan una base de datos SQLite en memoria (no requieren MySQL en ejecución).
+Para consultar el paso a paso completo de instalación, ejecución, cobertura y solución de errores,
+ver [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Documentación
 
-- `docs/ARCHITECTURE.md` - Diseño completo del sistema
-- `docs/API.md` - Especificación de endpoints
-- `docs/DATABASE.md` - Esquema de base de datos
-- `docs/LEGISLATIVE.md` - Normas laborales colombianas implementadas
+- `docs/ARCHITECTURE.md` - Diseño completo del sistema (Fase 1)
+- `docs/DATABASE.md` - Esquema de base de datos y diagrama de relaciones
+- `docs/MATRIZ.md` - Matriz de turnos (ciclo de 4 semanas, `matriz_analistas`) y frontend en `/app`
+- `docs/CARGA_MATRIZ.md` - Guía para cargar trabajadores, cargos, turnos y reemplazos (Fase 2)
+- `docs/TESTING.md` - Guía de pruebas
+- `docs/USUARIOS.md` - Roles, cargos, permisos, cuentas y recuperación por correo
 
 ## Licencia
 
