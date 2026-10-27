@@ -1,4 +1,5 @@
 """Servicio de autenticación: verificación de credenciales y emisión de tokens."""
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token, create_refresh_token, verify_password
@@ -7,8 +8,11 @@ from app.models.usuario import Usuario
 
 def authenticate_user(db: Session, username: str, password: str) -> Usuario | None:
     """Devuelve el Usuario si las credenciales son válidas y está activo; None en caso contrario."""
-    usuario = db.query(Usuario).filter(Usuario.username == username).first()
-    if usuario is None or not usuario.activo:
+    ident = username.strip()
+    usuario = (
+        db.query(Usuario).filter(or_(Usuario.username == ident, Usuario.email == ident.lower())).first()
+    )
+    if usuario is None or not usuario.activo or not usuario.trabajador.activo:
         return None
     if not verify_password(password, usuario.password_hash):
         return None

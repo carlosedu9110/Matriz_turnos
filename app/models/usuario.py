@@ -1,4 +1,4 @@
-"""Modelo de Usuario (credenciales de acceso al sistema, ligadas 1-a-1 a un Trabajador)."""
+﻿"""Modelo de Usuario (credenciales de acceso al sistema, ligadas 1-a-1 a un Trabajador)."""
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,22 @@ class Usuario(Base):
 
     trabajador: Mapped["Trabajador"] = relationship(back_populates="usuario")
     roles: Mapped[list["Rol"]] = relationship(secondary="usuario_rol", back_populates="usuarios")
+
+    @property
+    def nombres(self) -> str:
+        return self.trabajador.nombres
+
+    @property
+    def apellidos(self) -> str:
+        return self.trabajador.apellidos
+
+    @property
+    def telefono(self) -> str | None:
+        return self.trabajador.telefono
+
+    @property
+    def cargo(self) -> str | None:
+        return self.trabajador.cargo.nombre if self.trabajador.cargo else None
 
     def __repr__(self) -> str:
         return f"<Usuario id={self.id} username={self.username!r}>"

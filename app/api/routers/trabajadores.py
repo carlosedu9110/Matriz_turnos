@@ -1,15 +1,16 @@
 ﻿"""Endpoints de gestión de trabajadores.
 
-Lectura: cualquier usuario autenticado. Escritura: solo Administrador.
+Listado y escritura: solo rol Admin. Un Usuario final solo consulta su propia ficha.
 """
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_active_user, require_roles
+from app.core.dependencies import es_admin, get_current_active_user, require_admin
 from app.db.session import get_db
 from app.models import Trabajador, Usuario
 from app.schemas.trabajador import ImpactoOut, TrabajadorCreate, TrabajadorOut, TrabajadorUpdate, UsuarioCreate
+from app.schemas.usuario import UsuarioAdminOut, UsuarioCrearOut
 from app.services.common import commit_or_409, get_or_404
 from app.services.trabajador_service import (
     calcular_impacto,
@@ -21,10 +22,10 @@ from app.services.trabajador_service import (
 )
 
 router = APIRouter(prefix="/trabajadores", tags=["trabajadores"])
-admin = Depends(require_roles("Administrador"))
+admin = Depends(require_admin)
 
 
-@router.get("", response_model=list[TrabajadorOut], dependencies=[Depends(get_current_active_user)])
+@router.get("", response_model=list[TrabajadorOut], dependencies=[admin])
 def listar_trabajadores(
     q: str | None = None,
     area_id: int | None = None,
@@ -50,8 +51,15 @@ def listar_trabajadores(
     return query.order_by(Trabajador.apellidos, Trabajador.nombres).offset(skip).limit(min(limit, 500)).all()
 
 
-@router.get("/{trabajador_id}", response_model=TrabajadorOut, dependencies=[Depends(get_current_active_user)])
-def obtener_trabajador(trabajador_id: int, db: Session = Depends(get_db)):
+@router.get("/{trabajador_id}", response_model=TrabajadorOut)
+def obtener_trabajador(
+    trabajador_id: int,
+    db: Session = Depends(get_db),
+    actor: Usuario = Depends(get_current_active_user),
+):
+    """El Admin consulta a cualquiera; un Usuario final solo su propia ficha."""
+    if not es_admin(actor) and actor.trabajador_id != trabajador_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo puedes consultar tu propia información")
     return get_or_404(db, Trabajador, trabajador_id, "Trabajador")
 
 
@@ -92,7 +100,7 @@ def dar_baja(
     reemplazo_id: int | None = None,
     sin_relevo: bool = False,
     db: Session = Depends(get_db),
-    actor: Usuario = Depends(require_roles("Administrador")),
+    actor: Usuario = Depends(require_admin),
 ):
     """Baja lógica. Si está en una matriz responde 409 EN_MATRIZ: indica `reemplazo_id` (quien lo sustituye)
     o `sin_relevo=true` (solo si únicamente es relevo)."""
@@ -100,17 +108,24 @@ def dar_baja(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{trabajador_id}/usuario", response_model=TrabajadorOut, status_code=201, dependencies=[admin])
+@router.post("/{trabajador_id}/usuario", response_model=UsuarioCrearOut, status_code=201, dependencies=[admin])
 def crear_acceso(trabajador_id: int, datos: UsuarioCreate, db: Session = Depends(get_db)):
-    """Crea el usuario de acceso de un trabajador que aún no lo tiene."""
-    return dar_acceso(db, get_or_404(db, Trabajador, trabajador_id, "Trabajador"), datos)
+    """Crea la cuenta de un trabajador sin acceso. Recibe un correo para definir su contraseña."""
+    usuario, enviado = dar_acceso(db, get_or_404(db, Trabajador, trabajador_id, "Trabajador"), datos)
+    return UsuarioCrearOut(
+        usuario=UsuarioAdminOut.model_validate(usuario),
+        correo_enviado=enviado,
+        mensaje="Acceso creado. Se envió un correo para que defina su contraseña."
+        if enviado
+        else "Acceso creado, pero no se pudo enviar el correo.",
+    )
 
 
 @router.delete("/{trabajador_id}/usuario", status_code=204)
 def eliminar_acceso(
     trabajador_id: int,
     db: Session = Depends(get_db),
-    actor: Usuario = Depends(require_roles("Administrador")),
+    actor: Usuario = Depends(require_admin),
 ):
     """Elimina el usuario de acceso (el trabajador y su historial se conservan)."""
     quitar_acceso(db, get_or_404(db, Trabajador, trabajador_id, "Trabajador"), actor)

@@ -90,10 +90,26 @@ class GenerarOut(BaseModel):
     omitidas: int
 
 
+class AsignacionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    fecha: date
+    tipo_turno_id: int
+    manual: bool
+    trabajador: PersonaMini
+
+
 class AsignacionManualIn(BaseModel):
     trabajador_id: int
     fecha: date
     tipo_turno_id: int
+
+
+class AsignacionUpdate(BaseModel):
+    trabajador_id: int | None = None
+    fecha: date | None = None
+    tipo_turno_id: int | None = None
 
 
 class CeldaOut(BaseModel):

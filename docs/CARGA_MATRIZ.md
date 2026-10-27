@@ -2,7 +2,7 @@
 
 Esta guía es para el compañero que va a registrar en el sistema los datos de la matriz de turnos:
 **áreas, cargos, tipos de turno, trabajadores y reemplazos**. Puede hacerse desde Swagger
-(`http://localhost:8000/docs`) o desde Postman. Solo un usuario con rol **Administrador** puede crear,
+(`http://localhost:8000/docs`) o desde Postman. Solo un usuario con rol **Admin** puede crear,
 modificar o dar de baja datos; cualquier usuario autenticado puede consultarlos.
 
 ## Orden de carga (importante)
@@ -17,8 +17,8 @@ Cada paso depende del anterior:
 1. La API debe estar corriendo (ver README) y la base creada con `python -m app.db.init_db`
    (la tabla `reemplazos` se crea con este mismo comando; es seguro repetirlo).
 2. Inicia sesión:
-   - **Swagger**: botón **Authorize** → usuario y contraseña de un Administrador.
-   - **Postman**: `POST /auth/login` con `{"username": "...", "password": "..."}` y usa el
+   - **Swagger**: botón **Authorize** → correo o usuario y contraseña de un Admin.
+   - **Postman**: `POST /auth/login` con `{"username": "correo o usuario", "password": "..."}` y usa el
      `access_token` como *Bearer Token* en cada petición. El token dura 30 minutos.
 
 ## Paso 1 — Áreas
@@ -36,8 +36,10 @@ Guarda el `id` que responde. El nombre no puede repetirse (error `409`).
 `POST /cargos`
 
 ```json
-{ "nombre": "Operador", "descripcion": "Operador de planta", "area_id": 1 }
+{ "nombre": "Analista", "descripcion": "Analista de planta", "area_id": 1 }
 ```
+
+Los únicos cargos del sistema son `Analista`, `Especialista` y `Admin`; se crean automáticamente al inicializar la base.
 
 ## Paso 3 — Tipos de turno
 
@@ -68,12 +70,11 @@ Guarda el `id` que responde. El nombre no puede repetirse (error `409`).
 ```
 
 - `documento` es único. Si el cargo pertenece a un área distinta de `area_id`, responde `422`.
-- **Opcional — dar acceso al sistema**: agrega el bloque `usuario` (rol por defecto `Trabajador`;
-  usa `Administrador` solo si corresponde):
+- **No incluyas contraseñas en los datos de carga.** Desde el panel **Usuarios**, crea la cuenta
+  o vincula el trabajador existente con correo, cargo y rol (`Usuario final` o `Admin`). El sistema
+  envía una invitación para que la persona establezca su propia contraseña.
 
-```json
-"usuario": { "username": "aperez", "email": "aperez@empresa.com", "password": "ClaveSegura123!", "rol": "Trabajador" }
-```
+Los cargos válidos son `Analista`, `Especialista` y `Admin`; los permisos corresponden al rol, no al cargo.
 
 Consultar y corregir:
 
@@ -110,7 +111,7 @@ Anular uno registrado por error: `DELETE /reemplazos/{id}` (baja lógica).
 | Código | Significado | Qué hacer |
 |--------|-------------|-----------|
 | 401 | Sin token o token vencido | Vuelve a iniciar sesión |
-| 403 | Tu usuario no es Administrador | Usa una cuenta de Administrador |
+| 403 | Tu usuario no tiene rol Admin | Usa una cuenta de rol Admin |
 | 404 | Un id (área, cargo, trabajador, turno) no existe | Verifica el id con el `GET` correspondiente |
 | 409 | Dato duplicado (nombre, documento, username, email) o reemplazo cruzado | Revisa si ya está cargado |
 | 422 | Datos inválidos (fechas, cargo de otra área, campos faltantes) | Lee el campo `detail` de la respuesta |

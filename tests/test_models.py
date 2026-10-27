@@ -1,4 +1,4 @@
-"""Pruebas de modelos ORM: relaciones y restricciones de unicidad."""
+﻿"""Pruebas de modelos ORM: relaciones y restricciones de unicidad."""
 import pytest
 from sqlalchemy.exc import IntegrityError
 
@@ -59,7 +59,7 @@ def test_usuario_roles_many_to_many(db_session, admin_role, worker_role):
     db_session.add(usuario)
     db_session.commit()
 
-    assert {r.nombre for r in usuario.roles} == {"Administrador", "Trabajador"}
+    assert {r.nombre for r in usuario.roles} == {"Admin", "Usuario final"}
     assert usuario in admin_role.usuarios
 
 

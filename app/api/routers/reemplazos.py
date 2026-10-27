@@ -1,6 +1,6 @@
-"""Endpoints de reemplazos.
+﻿"""Endpoints de reemplazos.
 
-Lectura: cualquier usuario autenticado. Escritura: solo Administrador.
+Lectura y escritura: solo rol Admin (el Usuario final ve sus reemplazos reflejados en su matriz).
 """
 from datetime import date
 
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_active_user, require_roles
+from app.core.dependencies import require_admin
 from app.db.session import get_db
 from app.models import Reemplazo
 from app.schemas.reemplazo import ReemplazoCreate, ReemplazoOut
@@ -16,10 +16,10 @@ from app.services.common import get_or_404
 from app.services.reemplazo_service import crear_reemplazo
 
 router = APIRouter(prefix="/reemplazos", tags=["reemplazos"])
-admin = Depends(require_roles("Administrador"))
+admin = Depends(require_admin)
 
 
-@router.get("", response_model=list[ReemplazoOut], dependencies=[Depends(get_current_active_user)])
+@router.get("", response_model=list[ReemplazoOut], dependencies=[admin])
 def listar_reemplazos(
     trabajador_id: int | None = None,
     desde: date | None = None,
@@ -39,7 +39,7 @@ def listar_reemplazos(
     return q.order_by(Reemplazo.fecha_inicio.desc()).all()
 
 
-@router.get("/{reemplazo_id}", response_model=ReemplazoOut, dependencies=[Depends(get_current_active_user)])
+@router.get("/{reemplazo_id}", response_model=ReemplazoOut, dependencies=[admin])
 def obtener_reemplazo(reemplazo_id: int, db: Session = Depends(get_db)):
     return get_or_404(db, Reemplazo, reemplazo_id, "Reemplazo")
 

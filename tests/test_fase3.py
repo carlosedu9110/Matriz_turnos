@@ -95,8 +95,14 @@ def test_reemplazo_se_refleja_en_matriz(client, admin_headers, ocho):
     assert cubierta["titular"]["id"] == ocho[0]
 
 
-def test_asignacion_manual_no_se_sobrescribe(client, admin_headers, ocho, db_session):
+def test_asignacion_manual_no_se_sobrescribe(client, admin_headers, ocho, db_session, worker_role, cargos):
     cid = _ciclo(client, admin_headers, ocho).json()["id"]
+    crear_usuario = client.post(
+        f"/trabajadores/{ocho[0]}/usuario",
+        json={"email": "manual@example.com", "cargo": "Analista"},
+        headers=admin_headers,
+    )
+    assert crear_usuario.status_code == 201, crear_usuario.text
     d = LUNES
     rango = {"desde": d.isoformat(), "hasta": d.isoformat()}
     client.post(f"/matriz/ciclos/{cid}/generar", json=rango, headers=admin_headers)

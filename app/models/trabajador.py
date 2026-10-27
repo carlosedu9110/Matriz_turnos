@@ -30,6 +30,18 @@ class Trabajador(Base):
     )
 
     @property
+    def email(self) -> str | None:
+        return self.usuario.email if self.usuario else None
+
+    @property
+    def rol(self) -> str | None:
+        return self.usuario.roles[0].nombre if self.usuario and self.usuario.roles else None
+
+    @property
+    def usuario_id(self) -> int | None:
+        return self.usuario.id if self.usuario else None
+
+    @property
     def tiene_usuario(self) -> bool:
         return self.usuario is not None
 

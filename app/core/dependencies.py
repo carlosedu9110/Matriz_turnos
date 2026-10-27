@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWTError
 from sqlalchemy.orm import Session
 
+from app.core.roles import ROL_ADMIN
 from app.core.security import TOKEN_TYPE_ACCESS, decode_token
 from app.db.session import get_db
 from app.models.usuario import Usuario
@@ -37,7 +38,7 @@ def get_current_user(
         raise CREDENTIALS_EXCEPTION
 
     usuario = db.query(Usuario).filter(Usuario.username == username).first()
-    if usuario is None or not usuario.activo:
+    if usuario is None or not usuario.activo or not usuario.trabajador.activo:
         raise CREDENTIALS_EXCEPTION
     return usuario
 
@@ -62,3 +63,11 @@ def require_roles(*allowed_roles: str):
         return current_user
 
     return _checker
+
+def es_admin(usuario: Usuario) -> bool:
+    """El permiso depende del ROL del usuario, nunca de su cargo."""
+    return ROL_ADMIN in {rol.nombre for rol in usuario.roles}
+
+
+# Dependencia reutilizable: solo rol Admin (401 sin sesión, 403 sin permiso).
+require_admin = require_roles(ROL_ADMIN)

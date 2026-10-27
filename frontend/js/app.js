@@ -3,7 +3,16 @@ const $ = (id) => document.getElementById(id);
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
-const state = { isAdmin: false, matrices: [], matriz: null, anchor: new Date(), scope: "week", layout: "turno", data: null };
+const state = {
+  isAdmin: false,
+  matrices: [],
+  matriz: null,
+  anchor: new Date(),
+  scope: "week",
+  layout: "turno",
+  assignmentMode: false,
+  data: null,
+};
 
 function el(tag, props = {}, ...children) {
   const n = document.createElement(tag);
@@ -136,7 +145,7 @@ function headRow(first, dias) {
 function clickable(node, celda) {
   if (!state.isAdmin) return node;
   node.classList.add("clickable");
-  node.addEventListener("click", () => openCelda(celda));
+  node.addEventListener("click", () => state.assignmentMode ? openAsignacion(celda) : openCelda(celda));
   return node;
 }
 
@@ -157,6 +166,14 @@ function renderTurno(tabla, d, dias) {
           }, (c.es_reemplazo ? "↪ " : "") + c.trabajador.nombres);
           td.append(clickable(chip, c));
         });
+        if (state.isAdmin && state.assignmentMode && celdas.length === 0) {
+          td.append(el("button", {
+            class: "add-assignment",
+            type: "button",
+            title: "Asignar usuario a este turno",
+            onclick: () => openAsignacion(null, { fecha: iso(day), tipo_turno_id: t.id }),
+          }, "+"));
+        }
         return td;
       }),
     ))));
@@ -179,16 +196,29 @@ function renderPersona(tabla, d, dias) {
   tabla.append(headRow("Persona", dias), el("tbody", {}, personas.map((p) =>
     el("tr", {},
       el("td", { class: "rowhead", title: `${p.nombres} ${p.apellidos}` }, p.nombres, p.nota ? el("small", {}, p.nota) : null),
-      dias.map((day) => el("td", { class: dayCls(day) }, (idx[`${p.id}|${iso(day)}`] || []).map(({ c, ausente }) => {
-        const t = tipos[c.tipo_turno_id];
-        const node = el("div", {
-          class: "cell-shift" + (ausente ? " absent" : "") + (c.es_reemplazo && !ausente ? " cover" : ""),
-          style: `background:${t.color || "#888"}`,
-          title: ausente ? `Ausente · lo cubre ${c.trabajador.nombres}` : c.es_reemplazo ? `Cubre a ${c.titular.nombres}` : t.nombre,
-        }, (c.es_reemplazo && !ausente ? "↪ " : "") + t.nombre);
-        return clickable(node, c);
-      }))),
-    ))));
+      dias.map((day) => {
+        const elementos = idx[`${p.id}|${iso(day)}`] || [];
+        const td = el("td", { class: dayCls(day) });
+        elementos.forEach(({ c, ausente }) => {
+          const t = tipos[c.tipo_turno_id];
+          const node = el("div", {
+            class: "cell-shift" + (ausente ? " absent" : "") + (c.es_reemplazo && !ausente ? " cover" : ""),
+            style: `background:${t.color || "#888"}`,
+            title: ausente ? `Ausente · lo cubre ${c.trabajador.nombres}` : c.es_reemplazo ? `Cubre a ${c.titular.nombres}` : t.nombre,
+          }, (c.es_reemplazo && !ausente ? "↪ " : "") + t.nombre);
+          td.append(clickable(node, c));
+        });
+        if (state.isAdmin && state.assignmentMode && elementos.length === 0) {
+          td.append(el("button", {
+            class: "add-assignment",
+            type: "button",
+            title: `Asignar turno a ${p.nombres}`,
+            onclick: () => openAsignacion(null, { fecha: iso(day), trabajador_id: p.id }),
+          }, "+"));
+        }
+        return td;
+      })),
+    )));
 }
 
 // ---- Diálogos ----
@@ -276,13 +306,14 @@ const inputEl = (name, label, attrs = {}) => {
 };
 
 function formAcceso() {
-  const u = inputEl("username", "Usuario", { minlength: "3", maxlength: "50" });
   const e = inputEl("email", "Correo", { type: "email" });
-  const p = inputEl("password", "Contraseña (mín. 8)", { type: "password", minlength: "8", autocomplete: "new-password" });
-  const rol = el("select", {}, el("option", { value: "Trabajador" }, "Trabajador"), el("option", { value: "Administrador" }, "Administrador"));
+  const c = el("select", {}, ...["Analista", "Especialista", "Admin"].map((x) => el("option", { value: x }, x)));
+  const rol = el("select", {},
+    el("option", { value: "Usuario final" }, "Usuario final"),
+    el("option", { value: "Admin" }, "Admin"));
   return {
-    nodes: [u.label, e.label, p.label, el("label", {}, "Rol", rol)],
-    valor: () => ({ username: u.input.value.trim(), email: e.input.value.trim(), password: p.input.value, rol: rol.value }),
+    nodes: [e.label, el("label", {}, "Cargo", c), el("label", {}, "Rol (permisos)", rol)],
+    valor: () => ({ email: e.input.value.trim(), cargo: c.value, rol: rol.value }),
   };
 }
 
@@ -457,6 +488,336 @@ function renderAlertas() {
     : "";
 }
 
+// ---- Gestión administrativa de usuarios (los roles se comprueban también en la API) ----
+function selectField(label, items, selected, textOf, valueOf) {
+  const select = el("select", {});
+  items.forEach((item) => {
+    const option = el("option", { value: valueOf(item) }, textOf(item));
+    if (String(valueOf(item)) === String(selected)) option.selected = true;
+    select.append(option);
+  });
+  return el("label", {}, label, select);
+}
+
+async function openPersonal() {
+  let lista, sinCuenta;
+  try {
+    [lista, sinCuenta] = await Promise.all([
+      Api.get("/usuarios"),
+      Api.get("/trabajadores?activo=true&limit=500"),
+    ]);
+    sinCuenta = sinCuenta.filter((t) => !t.tiene_usuario);
+  }
+  catch (e) { return toast(e.message, true); }
+  const accion = (label, fn, cls = "") => el("button", {
+    class: `btn ${cls}`, type: "button", onclick: fn,
+  }, label);
+  const filas = lista.map((u) => {
+    const rol = u.roles.map((r) => r.nombre).join(", ");
+    const estado = u.activo ? "Activo" : "Desactivado";
+    return el("tr", {},
+      el("td", {}, `${u.nombres} ${u.apellidos}`, el("br"), el("small", {}, u.email)),
+      el("td", {}, u.telefono || "—"),
+      el("td", {}, u.cargo || "—"),
+      el("td", {}, rol),
+      el("td", {}, el("span", { class: `badge ${u.activo ? "ok" : "off"}` }, estado)),
+      el("td", {}, el("div", { class: "row-actions" },
+        accion("Editar", () => openUserEdit(u)),
+        u.activo
+          ? accion("Desactivar", () => desactivarUser(u), "danger")
+          : accion("Activar", async () => {
+              try { await Api.post(`/usuarios/${u.id}/activar`); toast("Usuario activado"); openPersonal(); }
+              catch (e) { toast(e.message, true); }
+            }),
+        u.activo ? accion("Reenviar invitación", async () => {
+          try { toast((await Api.post(`/usuarios/${u.id}/reenviar-invitacion`)).mensaje); }
+          catch (e) { toast(e.message, true); }
+        }) : null,
+      )),
+    );
+  });
+  openDialog(
+    el("h2", {}, "Usuarios"),
+    el("p", { class: "muted" }, "El Admin gestiona las cuentas. Cada usuario define su contraseña desde el correo; el Admin nunca puede verla."),
+    el("div", { class: "actions", style: "justify-content:space-between" },
+      el("span", { class: "muted" }, `${lista.length} usuarios`),
+      el("div", { class: "row-actions" },
+        sinCuenta.length ? accion(`Dar acceso a trabajador (${sinCuenta.length})`, () => openLinkWorker(sinCuenta)) : null,
+        accion("＋ Crear usuario", () => openUserCreate(openPersonal), "primary"))),
+    el("div", { class: "table-scroll" }, el("table", { class: "personal-table" },
+      el("thead", {}, el("tr", {},
+        el("th", {}, "Usuario"), el("th", {}, "Teléfono"), el("th", {}, "Cargo"),
+        el("th", {}, "Rol"), el("th", {}, "Estado"), el("th", {}, "Acciones"))),
+      el("tbody", {}, filas))),
+    el("div", { class: "actions" }, cancelBtn()),
+  );
+  $("dlg").classList.add("wide");
+}
+
+function openLinkWorker(trabajadores) {
+  const trabajador = el("select", {}, ...trabajadores.map((t) =>
+    el("option", { value: t.id }, `${t.nombres} ${t.apellidos} · ${t.documento}`)));
+  const email = el("input", { type: "email", required: "", autocomplete: "email", placeholder: "persona@empresa.com" });
+  const cargo = el("select", {}, ...["Analista", "Especialista", "Admin"].map((x) => el("option", { value: x }, x)));
+  const rol = el("select", {}, ...["Usuario final", "Admin"].map((x) => el("option", { value: x }, x)));
+  const actualizarCargo = () => {
+    const t = trabajadores.find((x) => x.id === Number(trabajador.value));
+    if (t?.cargo) cargo.value = t.cargo.nombre;
+  };
+  trabajador.addEventListener("change", actualizarCargo);
+  actualizarCargo();
+  openDialog(
+    el("h2", {}, "Dar acceso a trabajador existente"),
+    el("p", { class: "muted" }, "El trabajador conservará su nombre y documento. Enviaremos un enlace para que cree su contraseña."),
+    el("label", {}, "Trabajador", trabajador),
+    el("label", {}, "Correo electrónico", email),
+    el("label", {}, "Cargo (posición laboral)", cargo),
+    el("label", {}, "Rol (permisos del sistema)", rol),
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: openPersonal }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try {
+          const r = await Api.post(`/trabajadores/${trabajador.value}/usuario`, {
+            email: email.value.trim(),
+            cargo: cargo.value,
+            rol: rol.value,
+          });
+          closeDialog();
+          toast(r.mensaje, !r.correo_enviado);
+          openPersonal();
+        } catch (e) { toast(e.message, true); }
+      } }, "Crear cuenta y enviar enlace")),
+  );
+}
+
+function userForm(user = null) {
+  const field = (name, label, value, attrs = {}) => {
+    const input = el("input", { name, value: value || "", required: "", ...attrs });
+    return { input, node: el("label", {}, label, input) };
+  };
+  const nombres = field("nombres", "Nombres", user?.nombres, { maxlength: "100" });
+  const apellidos = field("apellidos", "Apellidos", user?.apellidos, { maxlength: "100" });
+  const email = field("email", "Correo electrónico", user?.email, { type: "email", autocomplete: "email" });
+  const telefono = field("telefono", "Teléfono", user?.telefono, { maxlength: "30" });
+  const cargo = selectField("Cargo", ["Analista", "Especialista", "Admin"], user?.cargo || "Analista", (x) => x, (x) => x);
+  const rolActual = user?.roles?.[0]?.nombre || "Usuario final";
+  const rol = selectField("Rol (permisos)", ["Usuario final", "Admin"], rolActual, (x) => x, (x) => x);
+  const documento = user
+    ? null
+    : field("documento", "Documento (opcional)", "", { maxlength: "30", required: null });
+  return {
+    nodes: [nombres.node, apellidos.node, email.node, telefono.node, cargo, rol, documento?.node],
+    value() {
+      const result = {
+        nombres: nombres.input.value.trim(),
+        apellidos: apellidos.input.value.trim(),
+        email: email.input.value.trim(),
+        telefono: telefono.input.value.trim(),
+        cargo: cargo.querySelector("select").value,
+        rol: rol.querySelector("select").value,
+      };
+      if (documento?.input.value.trim()) result.documento = documento.input.value.trim();
+      return result;
+    },
+  };
+}
+
+function openUserCreate(volver = openPersonal) {
+  const form = userForm();
+  openDialog(
+    el("h2", {}, "Crear usuario"),
+    el("p", { class: "muted" }, "Se enviará un enlace al correo para que defina su contraseña. No se solicita ni se muestra una contraseña aquí."),
+    ...form.nodes,
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: volver }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try {
+          const r = await Api.post("/usuarios", form.value());
+          closeDialog();
+          toast(r.mensaje, !r.correo_enviado);
+          volver();
+        } catch (e) { toast(e.message, true); }
+      } }, "Crear y enviar invitación")),
+  );
+}
+
+function openUserEdit(user) {
+  const form = userForm(user);
+  openDialog(
+    el("h2", {}, `Editar ${user.nombres} ${user.apellidos}`),
+    ...form.nodes,
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: openPersonal }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try { await Api.patch(`/usuarios/${user.id}`, form.value()); toast("Usuario actualizado"); openPersonal(); }
+        catch (e) { toast(e.message, true); }
+      } }, "Guardar cambios")),
+  );
+}
+
+async function desactivarUser(user) {
+  let impacto;
+  try { impacto = await Api.get(`/trabajadores/${user.trabajador_id}/impacto`); }
+  catch (e) { return toast(e.message, true); }
+  const desactivar = async (reemplazoId = null, sinRelevo = false) => {
+    const params = new URLSearchParams();
+    if (reemplazoId) params.set("reemplazo_id", reemplazoId);
+    if (sinRelevo) params.set("sin_relevo", "true");
+    const query = params.size ? `?${params}` : "";
+    try {
+      await Api.post(`/usuarios/${user.id}/desactivar${query}`);
+      closeDialog();
+      toast("Usuario desactivado; sus turnos futuros fueron atendidos");
+      await load();
+      openPersonal();
+    } catch (e) { toast(e.message, true); }
+  };
+  if (!impacto.en_matriz) {
+    return openDialog(
+      el("h2", {}, `Desactivar ${user.nombres} ${user.apellidos}`),
+      el("p", {}, "Se bloqueará su acceso y se quitarán sus asignaciones futuras. El historial se conserva."),
+      el("div", { class: "actions" }, cancelBtn(),
+        el("button", { class: "btn danger", type: "button", onclick: () => desactivar() }, "Desactivar usuario")),
+    );
+  }
+
+  const esTitular = impacto.posiciones.some((p) => p.rol === "titular");
+  let usuarios = [];
+  try { usuarios = await Api.get("/usuarios?activo=true"); }
+  catch (e) { return toast(e.message, true); }
+  const ciclos = await Api.get("/matriz/ciclos");
+  const ocupados = new Set();
+  ciclos.forEach((c) => c.participantes.forEach((p) => {
+    ocupados.add(p.trabajador.id);
+    if (p.relevo) ocupados.add(p.relevo.id);
+  }));
+  const candidatos = usuarios.filter((u) => u.id !== user.id && !ocupados.has(u.trabajador_id));
+  const reemplazo = el("select", {},
+    el("option", { value: "" }, "— Elige un usuario activo —"),
+    ...candidatos.map((u) => el("option", { value: u.trabajador_id }, `${u.nombres} ${u.apellidos} · ${u.cargo || "sin cargo"}`)),
+  );
+  const sinRelevo = el("input", { type: "checkbox" });
+  openDialog(
+    el("h2", {}, `Desactivar ${user.nombres} ${user.apellidos}`),
+    el("div", { class: "warn" },
+      `Esta persona está en la matriz; hay que cubrir su posición antes de desactivarla.`,
+      el("ul", {}, impacto.posiciones.map((p) => el("li", {},
+        p.ciclo_nombre + ": " + (p.rol === "titular" ? `titular (fase ${p.fase})` : `relevo de ${p.titular}`)))),
+      impacto.asignaciones_futuras ? el("div", {}, `${impacto.asignaciones_futuras} turnos futuros.`) : null,
+    ),
+    candidatos.length
+      ? el("label", {}, "Reemplazo", reemplazo)
+      : el("div", { class: "warn" }, "No hay usuarios activos disponibles como reemplazo. Crea una cuenta activa primero."),
+    !esTitular && el("label", { style: "display:flex;gap:.5rem;align-items:center" }, sinRelevo, "Dejar el puesto de relevo sin cubrir"),
+    el("div", { class: "actions" },
+      el("button", { class: "btn", type: "button", onclick: () => openUserCreate(() => desactivarUser(user)) }, "＋ Crear reemplazo"),
+      cancelBtn(),
+      el("button", { class: "btn danger", type: "button", onclick: () => {
+        if (reemplazo.value) return desactivar(Number(reemplazo.value));
+        if (!esTitular && sinRelevo.checked) return desactivar(null, true);
+        toast("Selecciona o crea un reemplazo activo", true);
+      } }, "Reemplazar y desactivar")),
+  );
+}
+
+// ---- Gestión de asignaciones manuales ----
+async function openAsignacion(celda = null, sugerido = {}) {
+  const fechaInicial = sugerido.fecha || celda?.fecha || iso(new Date());
+  let existente = null;
+  try {
+    if (celda?.asignacion_id) {
+      const filas = await Api.get(`/matriz/asignaciones?desde=${fechaInicial}&hasta=${fechaInicial}`);
+      existente = filas.find((a) => a.id === celda.asignacion_id) || null;
+    } else if (sugerido.trabajador_id) {
+      const filas = await Api.get(`/matriz/asignaciones?desde=${fechaInicial}&hasta=${fechaInicial}&trabajador_id=${sugerido.trabajador_id}`);
+      existente = filas[0] || null;
+    }
+  } catch (e) { return toast(e.message, true); }
+
+  let usuarios;
+  try { usuarios = await Api.get("/usuarios?activo=true"); }
+  catch (e) { return toast(e.message, true); }
+  if (!usuarios.length) return toast("Crea un usuario activo antes de asignarlo a un turno", true);
+  const currentWorkerId = existente?.trabajador.id || sugerido.trabajador_id || celda?.trabajador.id || "";
+  const userSelect = el("select", { required: "" },
+    el("option", { value: "" }, "— Selecciona un usuario activo —"),
+    ...usuarios.map((u) => {
+      const op = el("option", { value: u.trabajador_id }, `${u.nombres} ${u.apellidos} · ${u.cargo || "sin cargo"}`);
+      if (String(u.trabajador_id) === String(currentWorkerId)) op.selected = true;
+      return op;
+    }),
+  );
+  const turnos = state.data?.tipos_turno || [];
+  const turnoActual = existente?.tipo_turno_id || sugerido.tipo_turno_id || celda?.tipo_turno_id;
+  const turnoSelect = el("select", { required: "" }, ...turnos.map((t) => {
+    const op = el("option", { value: t.id }, `${t.nombre} · ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`);
+    if (Number(turnoActual) === t.id) op.selected = true;
+    return op;
+  }));
+  const fecha = el("input", { type: "date", required: "", value: existente?.fecha || fechaInicial });
+  const botones = [
+    el("button", { class: "btn", type: "button", onclick: closeDialog }, "Cancelar"),
+  ];
+  if (existente) botones.push(el("button", { class: "btn danger", type: "button", onclick: async () => {
+    try { await Api.del(`/matriz/asignaciones/${existente.id}`); closeDialog(); toast("Asignación eliminada"); load(); }
+    catch (e) { toast(e.message, true); }
+  } }, "Eliminar"));
+  botones.push(el("button", { class: "btn primary", type: "button", onclick: async () => {
+    if (!userSelect.value || !turnoSelect.value || !fecha.value) return toast("Completa usuario, turno y fecha", true);
+    const body = { trabajador_id: Number(userSelect.value), fecha: fecha.value, tipo_turno_id: Number(turnoSelect.value) };
+    try {
+      if (existente) await Api.patch(`/matriz/asignaciones/${existente.id}`, body);
+      else await Api.put("/matriz/asignaciones", body);
+      closeDialog(); toast(existente ? "Asignación actualizada" : "Asignación creada"); load();
+    } catch (e) { toast(e.message, true); }
+  } }, existente ? "Guardar cambios" : "Asignar turno"));
+  openDialog(
+    el("h2", {}, existente ? "Modificar asignación" : "Asignar usuario a turno"),
+    el("label", {}, "Usuario activo", userSelect),
+    el("label", {}, "Turno", turnoSelect),
+    el("label", {}, "Fecha", fecha),
+    el("div", { class: "actions" }, botones),
+  );
+}
+
+function openForgotPassword() {
+  const email = el("input", { type: "email", autocomplete: "email", required: "", placeholder: "correo@empresa.com" });
+  openDialog(
+    el("h2", {}, "Recuperar contraseña"),
+    el("p", { class: "muted" }, "Si el correo está registrado, recibirás un enlace para crear una contraseña nueva."),
+    el("label", {}, "Correo electrónico", email),
+    el("div", { class: "actions" }, cancelBtn(),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try {
+          const r = await Api.post("/auth/forgot-password", { email: email.value.trim() });
+          closeDialog(); toast(r.mensaje);
+        } catch (e) { toast(e.message, true); }
+      } }, "Enviar enlace")),
+  );
+}
+
+function mostrarResetPassword(token) {
+  $("login-view").classList.remove("hidden");
+  $("app-view").classList.add("hidden");
+  const form = $("login-form");
+  form.replaceChildren(
+    el("h1", {}, "Crear contraseña"),
+    el("p", { class: "muted" }, "Elige una contraseña de al menos 8 caracteres."),
+  );
+  const password = el("input", { type: "password", minlength: "8", maxlength: "128", autocomplete: "new-password", required: "" });
+  const confirmar = el("input", { type: "password", minlength: "8", maxlength: "128", autocomplete: "new-password", required: "" });
+  const error = el("p", { class: "error" });
+  form.append(el("label", {}, "Nueva contraseña", password), el("label", {}, "Confirmar contraseña", confirmar), error,
+    el("button", { class: "btn primary", type: "submit" }, "Guardar contraseña"));
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    if (password.value !== confirmar.value) { error.textContent = "Las contraseñas no coinciden"; return; }
+    try {
+      const r = await Api.post("/auth/reset-password", { token, new_password: password.value });
+      history.replaceState({}, "", location.pathname);
+      toast(r.mensaje);
+      location.reload();
+    } catch (err) { error.textContent = err.message; }
+  };
+}
+
 // ---- Arranque ----
 function bindSegmented(id, key) {
   $(id).addEventListener("click", (e) => {
@@ -479,8 +840,8 @@ async function startApp() {
   $("login-view").classList.add("hidden");
   $("app-view").classList.remove("hidden");
   const me = await Api.get("/auth/me");
-  state.isAdmin = me.roles.some((r) => r.nombre === "Administrador");
-  $("user-label").textContent = `${me.username} · ${me.roles.map((r) => r.nombre).join(", ")}`;
+  state.isAdmin = me.roles.some((r) => r.nombre === "Admin");
+  $("user-label").textContent = `${me.nombres} ${me.apellidos} · ${me.roles.map((r) => r.nombre).join(", ")}`;
   document.querySelectorAll(".admin-only").forEach((n) => n.classList.toggle("hidden", !state.isAdmin));
   state.matrices = await Api.get("/matriz/ciclos");
   const sel = $("matriz-select");
@@ -492,13 +853,26 @@ async function startApp() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const resetToken = new URLSearchParams(location.hash.slice(1)).get("reset");
+  if (resetToken) {
+    mostrarResetPassword(resetToken);
+    return;
+  }
   bindSegmented("scope", "scope");
   bindSegmented("layout", "layout");
   $("prev").onclick = () => shift(-1);
   $("next").onclick = () => shift(1);
   $("today").onclick = () => { state.anchor = new Date(); load(); };
   $("generate").onclick = openGenerar;
-  $("personal").onclick = openPersonal;
+  $("users").onclick = openPersonal;
+  $("assign-mode").onclick = () => {
+    state.assignmentMode = !state.assignmentMode;
+    $("assign-mode").classList.toggle("active", state.assignmentMode);
+    $("assign-mode").textContent = state.assignmentMode ? "Salir de asignación" : "Asignar turnos";
+    toast(state.assignmentMode ? "Selecciona una celda para asignar o modificar persona, turno y fecha" : "Modo de asignación cerrado");
+    render();
+  };
+  $("forgot-password").onclick = openForgotPassword;
   $("dlg-form").addEventListener("submit", (e) => e.preventDefault());
   $("dlg").addEventListener("close", () => $("dlg").classList.remove("wide"));
   $("logout").onclick = () => { Api.setToken(null); location.reload(); };

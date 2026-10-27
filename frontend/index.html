@@ -11,10 +11,11 @@
     <form id="login-form" class="card">
       <h1>Matriz de turnos</h1>
       <p class="muted">Inicia sesión para ver la matriz</p>
-      <label>Usuario <input name="username" autocomplete="username" required></label>
+      <label>Usuario o correo <input name="username" autocomplete="username" required></label>
       <label>Contraseña <input name="password" type="password" autocomplete="current-password" required></label>
       <p id="login-error" class="error"></p>
       <button class="btn primary" type="submit">Ingresar</button>
+      <button id="forgot-password" class="btn" type="button">Olvidé mi contraseña</button>
     </form>
   </section>
 
@@ -46,7 +47,8 @@
           <button data-v="turno" class="active">Por turno</button>
           <button data-v="persona">Por persona</button>
         </div>
-        <button id="personal" class="btn admin-only hidden">Personal</button>
+        <button id="users" class="btn admin-only hidden">Usuarios</button>
+        <button id="assign-mode" class="btn admin-only hidden">Asignar turnos</button>
         <button id="generate" class="btn primary admin-only hidden">Generar turnos</button>
       </div>
     </div>

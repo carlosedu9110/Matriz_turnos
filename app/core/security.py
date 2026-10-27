@@ -1,4 +1,6 @@
-"""Utilidades de seguridad: hashing de contraseñas y manejo de JWT."""
+﻿"""Utilidades de seguridad: hashing de contraseñas y manejo de JWT."""
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -58,3 +60,27 @@ def create_refresh_token(subject: str, roles: list[str]) -> str:
 def decode_token(token: str) -> dict[str, Any]:
     """Decodifica y valida un JWT. Lanza jwt.PyJWTError si es inválido o expiró."""
     return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+
+TOKEN_TYPE_RESET = "reset"
+
+
+def password_fingerprint(password_hash: str) -> str:
+    """Huella corta del hash vigente: invalida los enlaces de recuperación una vez usados."""
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+
+
+def generate_unusable_password_hash() -> str:
+    """Hash de una clave aleatoria que nadie conoce: la cuenta queda sin acceso hasta que el usuario defina la suya."""
+    return hash_password(secrets.token_urlsafe(32))
+
+
+def create_reset_token(email: str, password_hash: str, expires_delta: timedelta) -> str:
+    now = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "sub": email,
+        "type": TOKEN_TYPE_RESET,
+        "pwf": password_fingerprint(password_hash),
+        "iat": now,
+        "exp": now + expires_delta,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)

@@ -1,11 +1,12 @@
-"""Endpoints de catálogos: áreas, cargos y tipos de turno.
+﻿"""Endpoints de catálogos: áreas, cargos y tipos de turno.
 
-Lectura: cualquier usuario autenticado. Escritura: solo Administrador.
+Solo el rol Admin puede consultar y modificar catálogos.
 """
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_active_user, require_roles
+from app.core.roles import CARGOS
+from app.core.dependencies import require_admin
 from app.db.session import get_db
 from app.models import Area, Cargo, TipoTurno
 from app.schemas.catalogos import (
@@ -21,8 +22,8 @@ from app.schemas.catalogos import (
 )
 from app.services.common import commit_or_409, get_or_404
 
-admin = Depends(require_roles("Administrador"))
-autenticado = Depends(get_current_active_user)
+admin = Depends(require_admin)
+autenticado = Depends(require_admin)
 
 router = APIRouter(tags=["catálogos"])
 
@@ -85,6 +86,10 @@ def listar_cargos(area_id: int | None = None, activo: bool | None = None, db: Se
 
 @router.post("/cargos", response_model=CargoOut, status_code=201, dependencies=[admin])
 def crear_cargo(datos: CargoCreate, db: Session = Depends(get_db)):
+    if datos.nombre not in CARGOS:
+        raise HTTPException(422, f"Cargo no disponible. Usa: {', '.join(CARGOS)}")
+    if db.query(Cargo.id).filter(Cargo.nombre == datos.nombre).first():
+        raise HTTPException(409, "Ese cargo ya existe")
     if datos.area_id is not None:
         get_or_404(db, Area, datos.area_id, "Área")
     return _crear(db, Cargo(**datos.model_dump()))
@@ -92,6 +97,12 @@ def crear_cargo(datos: CargoCreate, db: Session = Depends(get_db)):
 
 @router.patch("/cargos/{cargo_id}", response_model=CargoOut, dependencies=[admin])
 def actualizar_cargo(cargo_id: int, datos: CargoUpdate, db: Session = Depends(get_db)):
+    if datos.nombre is not None and datos.nombre not in CARGOS:
+        raise HTTPException(422, f"Cargo no disponible. Usa: {', '.join(CARGOS)}")
+    if datos.nombre is not None and db.query(Cargo.id).filter(
+        Cargo.nombre == datos.nombre, Cargo.id != cargo_id
+    ).first():
+        raise HTTPException(409, "Ese cargo ya existe")
     if datos.area_id is not None:
         get_or_404(db, Area, datos.area_id, "Área")
     return _actualizar(db, get_or_404(db, Cargo, cargo_id, "Cargo"), datos)
@@ -99,7 +110,10 @@ def actualizar_cargo(cargo_id: int, datos: CargoUpdate, db: Session = Depends(ge
 
 @router.delete("/cargos/{cargo_id}", status_code=204, dependencies=[admin])
 def desactivar_cargo(cargo_id: int, db: Session = Depends(get_db)):
-    return _desactivar(db, get_or_404(db, Cargo, cargo_id, "Cargo"))
+    cargo = get_or_404(db, Cargo, cargo_id, "Cargo")
+    if cargo.nombre in CARGOS:
+        raise HTTPException(409, "Los tres cargos permitidos del sistema no se pueden desactivar")
+    return _desactivar(db, cargo)
 
 
 # ---- Tipos de turno ----

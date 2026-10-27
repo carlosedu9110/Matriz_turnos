@@ -95,6 +95,8 @@ def generar_asignaciones(db: Session, ciclo: CicloTurno, datos: GenerarIn) -> Ge
     dia = datos.desde
     while dia <= datos.hasta:
         for part in ciclo.participantes:
+            if not part.trabajador.activo or (part.trabajador.usuario and not part.trabajador.usuario.activo):
+                continue  # nunca se asigna a personas desactivadas
             turno_id = plantilla.get((semana_de_ciclo(ciclo.fecha_ancla, part.fase, dia), dia.weekday()))
             if turno_id is None:
                 continue

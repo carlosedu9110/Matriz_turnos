@@ -1,4 +1,4 @@
-"""Pruebas del flujo de autenticación: login y acceso protegido."""
+﻿"""Pruebas del flujo de autenticación: login y acceso protegido."""
 
 
 def test_login_success(client, sample_user):
@@ -34,7 +34,7 @@ def test_me_with_valid_token(client, sample_user):
     body = response.json()
     assert body["username"] == "apere"
     assert body["email"] == "apere@example.com"
-    assert any(rol["nombre"] == "Administrador" for rol in body["roles"])
+    assert any(rol["nombre"] == "Admin" for rol in body["roles"])
 
 
 def test_me_with_invalid_token(client):

@@ -1,77 +1,101 @@
-"""Servicio de trabajadores: validaciones, accesos (usuarios) y bajas con impacto en la matriz."""
+﻿"""Servicio de trabajadores: validaciones, accesos (usuarios) y bajas con impacto en la matriz."""
 from datetime import date
 
 from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_password
+from app.core.roles import CARGOS, ROL_ADMIN
 from app.models import Area, Asignacion, Cargo, CicloParticipante, CicloTurno, Reemplazo, Rol, Trabajador, Usuario
 from app.schemas.trabajador import ImpactoOut, PosicionMatriz, TrabajadorCreate, UsuarioCreate
+from app.services.acceso_service import (
+    crear_usuario_con_invitacion,
+    email_en_uso,
+    enviar_invitacion,
+    obtener_rol,
+)
 from app.services.common import commit_or_409, get_or_404
 
 
 def validar_area_cargo(db: Session, area_id: int | None, cargo_id: int | None) -> None:
     area = get_or_404(db, Area, area_id, "Área") if area_id is not None else None
     cargo = get_or_404(db, Cargo, cargo_id, "Cargo") if cargo_id is not None else None
+    if cargo and cargo.nombre not in CARGOS:
+        raise HTTPException(422, "Cargo no disponible. Usa Analista, Especialista o Admin")
     if area and cargo and cargo.area_id is not None and cargo.area_id != area.id:
         raise HTTPException(422, "El cargo no pertenece al área indicada")
 
 
-def _asignar_usuario(db: Session, trabajador: Trabajador, datos: UsuarioCreate) -> None:
-    rol = db.query(Rol).filter(Rol.nombre == datos.rol).first()
-    if rol is None:
-        raise HTTPException(422, f"Rol '{datos.rol}' no existe")
-    trabajador.usuario = Usuario(
-        username=datos.username,
-        email=datos.email,
-        password_hash=hash_password(datos.password),
-        roles=[rol],
-    )
-
-
 def crear_trabajador(db: Session, datos: TrabajadorCreate) -> Trabajador:
     validar_area_cargo(db, datos.area_id, datos.cargo_id)
-    trabajador = Trabajador(**datos.model_dump(exclude={"usuario"}))
-    db.add(trabajador)
+    cargo_usuario = None
     if datos.usuario is not None:
-        _asignar_usuario(db, trabajador, datos.usuario)
-    commit_or_409(db, "Documento, username o email ya registrados")
+        if datos.usuario.cargo is None:
+            raise HTTPException(422, "El cargo es obligatorio para crear una cuenta de usuario")
+        if email_en_uso(db, datos.usuario.email):
+            raise HTTPException(409, "Ya existe un usuario con ese correo")
+        obtener_rol(db, datos.usuario.rol)
+        cargo_usuario = db.query(Cargo).filter(
+            Cargo.nombre == datos.usuario.cargo, Cargo.activo.is_(True)
+        ).first()
+        if cargo_usuario is None:
+            raise HTTPException(422, f"El cargo '{datos.usuario.cargo}' no está disponible")
+        if datos.area_id is not None and cargo_usuario.area_id not in (None, datos.area_id):
+            raise HTTPException(422, "El cargo no pertenece al área indicada")
+        if datos.cargo_id is not None and cargo_usuario.id != datos.cargo_id:
+            raise HTTPException(422, "El cargo del trabajador y el de su cuenta deben coincidir")
+
+    trabajador = Trabajador(**datos.model_dump(exclude={"usuario"}))
+    if cargo_usuario is not None and trabajador.cargo is None:
+        trabajador.cargo = cargo_usuario
+    db.add(trabajador)
+    usuario = None
+    if datos.usuario is not None:
+        usuario = crear_usuario_con_invitacion(db, trabajador, datos.usuario.email, datos.usuario.rol)
+    commit_or_409(db, "Documento o correo ya registrados")
     db.refresh(trabajador)
+    if usuario is not None:
+        enviar_invitacion(usuario)
     return trabajador
 
 
 # ---- Accesos (usuarios) ----
-def _es_ultimo_admin(db: Session, usuario: Usuario) -> bool:
-    if not usuario.activo or "Administrador" not in {r.nombre for r in usuario.roles}:
+def es_ultimo_admin(db: Session, usuario: Usuario) -> bool:
+    if not usuario.activo or ROL_ADMIN not in {r.nombre for r in usuario.roles}:
         return False
     activos = (
-        db.query(Usuario).join(Usuario.roles).filter(Rol.nombre == "Administrador", Usuario.activo.is_(True)).count()
+        db.query(Usuario).join(Usuario.roles).filter(Rol.nombre == ROL_ADMIN, Usuario.activo.is_(True)).count()
     )
     return activos <= 1
 
 
-def dar_acceso(db: Session, trabajador: Trabajador, datos: UsuarioCreate) -> Trabajador:
+def dar_acceso(db: Session, trabajador: Trabajador, datos: UsuarioCreate) -> tuple[Usuario, bool]:
+    """Crea la cuenta y envía la invitación; el Admin nunca define ni conoce la contraseña."""
     if trabajador.usuario is not None:
         raise HTTPException(409, "El trabajador ya tiene acceso al sistema")
     if not trabajador.activo:
         raise HTTPException(422, "El trabajador está dado de baja")
-    _asignar_usuario(db, trabajador, datos)
-    commit_or_409(db, "Username o email ya registrados")
-    db.refresh(trabajador)
-    return trabajador
+    if datos.cargo is None:
+        raise HTTPException(422, "El cargo es obligatorio para crear una cuenta de usuario")
+    if email_en_uso(db, datos.email):
+        raise HTTPException(409, "Ya existe un usuario con ese correo")
+    obtener_rol(db, datos.rol)
+    cargo = db.query(Cargo).filter(Cargo.nombre == datos.cargo).first()
+    if cargo is None or not cargo.activo:
+        raise HTTPException(422, f"El cargo '{datos.cargo}' no está disponible")
+    trabajador.cargo = cargo
+    usuario = crear_usuario_con_invitacion(db, trabajador, datos.email, datos.rol)
+    commit_or_409(db, "Correo ya registrado")
+    db.refresh(usuario)
+    return usuario, enviar_invitacion(usuario)
 
 
 def quitar_acceso(db: Session, trabajador: Trabajador, actor: Usuario) -> None:
+    """Compatibilidad de la ruta antigua: ahora desactiva la cuenta, no la elimina."""
     usuario = trabajador.usuario
     if usuario is None:
         raise HTTPException(404, "El trabajador no tiene acceso al sistema")
-    if usuario.id == actor.id:
-        raise HTTPException(409, "No puedes eliminar tu propio acceso")
-    if _es_ultimo_admin(db, usuario):
-        raise HTTPException(409, "No se puede eliminar al único Administrador activo")
-    db.delete(usuario)
-    db.commit()
+    dar_de_baja(db, trabajador, actor)
 
 
 # ---- Bajas ----
@@ -129,8 +153,8 @@ def dar_de_baja(
     if usuario is not None:
         if usuario.id == actor.id:
             raise HTTPException(409, "No puedes darte de baja a ti mismo")
-        if _es_ultimo_admin(db, usuario):
-            raise HTTPException(409, "No se puede dar de baja al único Administrador activo")
+        if es_ultimo_admin(db, usuario):
+            raise HTTPException(409, "No se puede dar de baja al único Admin activo")
 
     hoy = date.today()
     partic = _participaciones(db, trabajador.id)

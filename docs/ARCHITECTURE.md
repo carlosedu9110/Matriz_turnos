@@ -48,10 +48,14 @@ app/
 - Login por `username` + `password` (`POST /auth/login`), devuelve un **access token** (corta duración)
   y un **refresh token** (larga duración), ambos JWT firmados con `SECRET_KEY` (HS256).
 - Las contraseñas se almacenan con hash **bcrypt** (vía `passlib`), nunca en texto plano.
+- El login también acepta el correo asociado a la cuenta. Las invitaciones y recuperaciones se
+  envían por correo con enlaces temporales de un solo uso; el Admin nunca define ni ve contraseñas.
 - `GET /auth/me` requiere un access token válido (`Authorization: Bearer <token>`) y devuelve el usuario
   autenticado junto con sus roles.
-- El control de acceso por rol se implementa con la dependencia `require_roles("Administrador")`,
-  reutilizable en cualquier endpoint de fases futuras.
+- Solo existen dos roles válidos: `Admin` y `Usuario final`. El control se implementa con
+  `require_roles("Admin")`; los permisos nunca dependen del cargo laboral.
+- `Usuario final` solo puede consultar su propio perfil y las asignaciones donde participa. Las
+  restricciones se aplican en los endpoints, no solo en los botones de la interfaz.
 
 ## Modelo de dominio (Fase 1)
 
@@ -63,8 +67,8 @@ Ver `docs/DATABASE.md` para el detalle de entidades, relaciones y restricciones.
   personal (documento, nombres, área, cargo), mientras que `Usuario` modela únicamente las credenciales
   de acceso al sistema (username, email, password). Un `Trabajador` puede existir sin tener acceso al
   sistema (relación 1:1 opcional desde `Trabajador`, obligatoria desde `Usuario`).
-- **Roles N:M**: un usuario puede tener más de un rol (tabla de asociación `usuario_rol`), aunque en
-  Fase 1 solo se usan `Administrador` y `Trabajador`.
+- **Roles y cargos**: se mantienen independientes. La tabla `usuario_rol` contiene los roles
+  `Admin` / `Usuario final`; el cargo (`Analista`, `Especialista`, `Admin`) pertenece al trabajador.
 - **JWT sin estado en servidor**: no se persisten tokens; la revocación/rotación de refresh tokens queda
   fuera del alcance de la Fase 1.
 - **SQLAlchemy 2.0 style** (`Mapped[...]`, `mapped_column`) para tipado explícito de modelos.

@@ -121,24 +121,30 @@ def test_no_puede_darse_de_baja_ni_quitarse_acceso(client, admin_headers, sample
     assert client.delete(f"/trabajadores/{sample_user.trabajador_id}/usuario", headers=admin_headers).status_code == 409
 
 
-def test_dar_y_quitar_acceso(client, admin_headers, ocho, worker_role):
+def test_dar_y_quitar_acceso(client, admin_headers, ocho, worker_role, cargos, definir_password):
     tid = ocho[8]
-    body = {"username": "nuevo", "email": "n@example.com", "password": "Clave1234!", "rol": "Trabajador"}
+    body = {"email": "n@example.com", "rol": "Usuario final", "cargo": "Analista"}
     r = client.post(f"/trabajadores/{tid}/usuario", json=body, headers=admin_headers)
-    assert r.status_code == 201 and r.json()["tiene_usuario"] is True
+    assert r.status_code == 201 and r.json()["usuario"]["email"] == "n@example.com" and r.json()["correo_enviado"]
+    assert "password" not in str(r.json()).lower()
+    assert client.get(f"/trabajadores/{tid}", headers=admin_headers).json()["tiene_usuario"] is True
     assert client.post(f"/trabajadores/{tid}/usuario", json=body, headers=admin_headers).status_code == 409
-    assert client.post("/auth/login", json={"username": "nuevo", "password": "Clave1234!"}).status_code == 200
+    assert client.post("/auth/login", json={"username": "n@example.com", "password": "Clave1234!"}).status_code == 401
+    assert definir_password("n@example.com", "Clave1234!").status_code == 200
+    assert client.post("/auth/login", json={"username": "n@example.com", "password": "Clave1234!"}).status_code == 200
 
     assert client.delete(f"/trabajadores/{tid}/usuario", headers=admin_headers).status_code == 204
-    assert client.get(f"/trabajadores/{tid}", headers=admin_headers).json()["tiene_usuario"] is False
-    assert client.post("/auth/login", json={"username": "nuevo", "password": "Clave1234!"}).status_code == 401
-    assert client.delete(f"/trabajadores/{tid}/usuario", headers=admin_headers).status_code == 404
+    ficha = client.get(f"/trabajadores/{tid}", headers=admin_headers).json()
+    assert ficha["tiene_usuario"] is True and ficha["activo"] is False
+    assert client.post("/auth/login", json={"username": "n@example.com", "password": "Clave1234!"}).status_code == 401
+    assert client.delete(f"/trabajadores/{tid}/usuario", headers=admin_headers).status_code == 409
 
 
-def test_ultimo_admin_protegido(client, admin_headers, db_session, ocho, admin_role):
-    body = {"username": "otro", "email": "o@example.com", "password": "Clave1234!", "rol": "Administrador"}
+def test_ultimo_admin_protegido(client, admin_headers, db_session, ocho, admin_role, worker_role, cargos, definir_password):
+    body = {"email": "o@example.com", "rol": "Admin", "cargo": "Analista"}
     client.post(f"/trabajadores/{ocho[8]}/usuario", json=body, headers=admin_headers)
-    otro = {"Authorization": "Bearer " + client.post("/auth/login", json={"username": "otro", "password": "Clave1234!"}).json()["access_token"]}
+    assert definir_password("o@example.com", "Clave1234!").status_code == 200
+    otro = {"Authorization": "Bearer " + client.post("/auth/login", json={"username": "o@example.com", "password": "Clave1234!"}).json()["access_token"]}
     # con dos admins, "otro" puede quitar a "apere"; luego "apere" ya no existe y "otro" es el único.
     ap = db_session.query(Trabajador).filter_by(documento="123456789").one()
     assert client.delete(f"/trabajadores/{ap.id}/usuario", headers=otro).status_code == 204

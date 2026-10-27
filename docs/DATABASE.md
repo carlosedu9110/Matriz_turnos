@@ -29,7 +29,8 @@ lo que permite ejecutar las pruebas automatizadas sin necesidad de una instancia
 | nombre        | VARCHAR(50)  | UNIQUE, NOT NULL, index      |
 | descripcion   | VARCHAR(255) | NULL                          |
 
-Roles base sembrados en Fase 1: `Administrador`, `Trabajador`.
+Roles base: `Admin`, `Usuario final`. Los cargos laborales (`Analista`, `Especialista`, `Admin`)
+se almacenan por separado en `cargos`.
 
 ### `usuario_rol` (asociación N:M)
 | Columna     | Tipo   | Restricciones                                   |
@@ -176,7 +177,7 @@ erDiagram
 - Un **cargo** (por ejemplo, *Supervisor*) puede ser asignado a varios trabajadores.
 - Cada **trabajador** puede tener **cero o una cuenta de usuario**. Esto permite registrar personas que
   todavía no necesitan ingresar a la aplicación.
-- Un **usuario** puede recibir uno o varios **roles** (por ejemplo, *Administrador* y *Trabajador*).
+- Los roles posibles son **Admin** y **Usuario final**; determinan los permisos y no dependen del cargo.
   La tabla `usuario_rol` registra esas asignaciones.
 - Un **tipo de turno** (por ejemplo, *Diurno* o *Nocturno*) se administra de forma independiente en
   esta fase; se conectará con la programación de turnos en fases posteriores.

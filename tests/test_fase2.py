@@ -1,4 +1,4 @@
-"""Pruebas de Fase 2: catálogos, trabajadores y reemplazos."""
+﻿"""Pruebas de Fase 2: catálogos, trabajadores y reemplazos."""
 import pytest
 
 from app.core.security import hash_password
@@ -44,7 +44,7 @@ def test_endpoints_requieren_token(client):
 
 
 def test_trabajador_no_puede_escribir_pero_si_leer(client, admin_headers, worker_headers):
-    assert client.get("/areas", headers=worker_headers).status_code == 200
+    assert client.get("/areas", headers=worker_headers).status_code == 403
     assert client.post("/areas", json={"nombre": "X"}, headers=worker_headers).status_code == 403
     assert _trab(client, worker_headers, "1").status_code == 403
 
@@ -52,9 +52,10 @@ def test_trabajador_no_puede_escribir_pero_si_leer(client, admin_headers, worker
 def test_catalogos_crud_y_unicidad(client, admin_headers):
     area = _area(client, admin_headers)
     assert client.post("/areas", json={"nombre": "Operaciones"}, headers=admin_headers).status_code == 409
-    cargo = client.post("/cargos", json={"nombre": "Supervisor", "area_id": area["id"]}, headers=admin_headers)
+    assert client.post("/cargos", json={"nombre": "Gerente"}, headers=admin_headers).status_code == 422
+    cargo = client.post("/cargos", json={"nombre": "Analista", "area_id": area["id"]}, headers=admin_headers)
     assert cargo.status_code == 201
-    assert client.post("/cargos", json={"nombre": "X", "area_id": 999}, headers=admin_headers).status_code == 404
+    assert client.post("/cargos", json={"nombre": "Especialista", "area_id": 999}, headers=admin_headers).status_code == 404
     turno = _turno(client, admin_headers)
     assert turno["nombre"] == "Diurno"
     assert client.post(
@@ -65,31 +66,37 @@ def test_catalogos_crud_y_unicidad(client, admin_headers):
     assert client.get("/areas?activo=true", headers=admin_headers).json() == []
 
 
-def test_trabajador_crud_con_usuario(client, admin_headers, worker_role):
+def test_trabajador_crud_con_usuario(client, admin_headers, worker_role, definir_password):
     area = _area(client, admin_headers)
-    cargo = client.post("/cargos", json={"nombre": "Op", "area_id": area["id"]}, headers=admin_headers).json()
+    cargo = client.post("/cargos", json={"nombre": "Analista", "area_id": area["id"]}, headers=admin_headers).json()
     r = _trab(
         client, admin_headers, "100", area_id=area["id"], cargo_id=cargo["id"],
-        usuario={"username": "nuevo", "email": "n@example.com", "password": "Clave1234!"},
     )
     assert r.status_code == 201
     assert r.json()["area"]["nombre"] == "Operaciones"
-    login = client.post("/auth/login", json={"username": "nuevo", "password": "Clave1234!"})
+    tid = r.json()["id"]
+    acceso = client.post(
+        f"/trabajadores/{tid}/usuario",
+        json={"email": "n@example.com", "cargo": "Analista"},
+        headers=admin_headers,
+    )
+    assert acceso.status_code == 201
+    assert definir_password("n@example.com", "Clave1234!").status_code == 200
+    login = client.post("/auth/login", json={"username": "n@example.com", "password": "Clave1234!"})
     assert login.status_code == 200
 
     assert _trab(client, admin_headers, "100").status_code == 409
     assert client.get("/trabajadores?q=A100", headers=admin_headers).json()[0]["documento"] == "100"
-    tid = r.json()["id"]
     assert client.patch(f"/trabajadores/{tid}", json={"telefono": "300"}, headers=admin_headers).json()["telefono"] == "300"
     assert client.delete(f"/trabajadores/{tid}", headers=admin_headers).status_code == 204
     assert client.get(f"/trabajadores/{tid}", headers=admin_headers).json()["activo"] is False
-    assert client.post("/auth/login", json={"username": "nuevo", "password": "Clave1234!"}).status_code == 401
+    assert client.post("/auth/login", json={"username": "n@example.com", "password": "Clave1234!"}).status_code == 401
 
 
 def test_trabajador_cargo_de_otra_area(client, admin_headers):
     a1 = _area(client, admin_headers, "A1")
     a2 = _area(client, admin_headers, "A2")
-    cargo = client.post("/cargos", json={"nombre": "C", "area_id": a1["id"]}, headers=admin_headers).json()
+    cargo = client.post("/cargos", json={"nombre": "Analista", "area_id": a1["id"]}, headers=admin_headers).json()
     assert _trab(client, admin_headers, "5", area_id=a2["id"], cargo_id=cargo["id"]).status_code == 422
 
 

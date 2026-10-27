@@ -1,5 +1,6 @@
-"""Configuración centralizada de la aplicación mediante variables de entorno."""
+﻿"""Configuración centralizada de la aplicación mediante variables de entorno."""
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -27,6 +28,20 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    admin_email: str = "admin@example.com"
+    admin_password: str = "Admin123!"
+
+    # Recuperación de contraseña / invitaciones por correo
+    frontend_base_url: str = "http://localhost:8000"
+    reset_token_expire_minutes: int = 60
+    invite_token_expire_hours: int = 72
+    email_backend: Literal["console", "smtp", "memory"] = "console"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "no-reply@matriz-turnos.local"
+    smtp_starttls: bool = True
 
     # CORS
     cors_origins: str = "http://localhost:5173,http://localhost:8080"

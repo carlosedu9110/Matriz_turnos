@@ -1,18 +1,19 @@
 ﻿"""Esquemas de Trabajador."""
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.schemas.catalogos import AreaOut, CargoOut
 
+CargoUsuario = Literal["Analista", "Especialista", "Admin"]
 
 class UsuarioCreate(BaseModel):
-    """Credenciales opcionales para dar acceso al sistema al crear un trabajador."""
+    """Acceso al sistema: el usuario define su propia contraseña con el enlace que recibe por correo."""
 
-    username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=128)
-    rol: str = "Trabajador"
+    rol: Literal["Admin", "Usuario final"] = "Usuario final"
+    cargo: CargoUsuario | None = None
 
 
 class TrabajadorCreate(BaseModel):
@@ -51,6 +52,9 @@ class TrabajadorOut(BaseModel):
     telefono: str | None = None
     activo: bool
     tiene_usuario: bool = False
+    usuario_id: int | None = None
+    email: str | None = None
+    rol: str | None = None
     area: AreaOut | None = None
     cargo: CargoOut | None = None
 

@@ -11,7 +11,7 @@ Aplicación web para la gestión integral de turnos, vacaciones, reemplazos y ho
 - ✅ Gestión de reemplazos
 - ✅ Registro y validación de horas extras
 - ✅ Cálculo automático según legislación colombiana
-- ✅ Roles y permisos (Administrador/Trabajador)
+- ✅ Roles y permisos (`Admin` / `Usuario final`), separados de los cargos (`Analista` / `Especialista` / `Admin`)
 - ✅ Auditoría completa de cambios
 - ✅ Reportes en Excel
 - ✅ Integración con calendario de festivos
@@ -48,7 +48,7 @@ Ver `docs/ARCHITECTURE.md` para la documentación completa de arquitectura.
 9. **Fase 9**: Auditoría y reportes
 10. **Fase 10**: Pruebas, seguridad y despliegue
 
-## Instalación (Fase 1)
+## Instalación
 
 ### Requisitos
 
@@ -97,7 +97,22 @@ Atajo (Windows): `.\iniciar.ps1` levanta el servidor sin activar el entorno. El 
 
 La API queda disponible en `http://localhost:8000` (docs interactivas en `/docs`).
 
-Usuario administrador inicial sembrado por `init_db`: `admin` / `Admin123!` (cambiar en producción).
+El primer administrador de desarrollo que siembra `init_db` es `admin` / `Admin123!`. Para definir
+otro correo o contraseña inicial, establece `ADMIN_EMAIL` y `ADMIN_PASSWORD` en el entorno antes de
+crear el primer Admin. Si copias `.env.example`, reemplaza el valor de ejemplo `ADMIN_PASSWORD` antes
+de ejecutar `init_db`; cambia también `SECRET_KEY` y configura SMTP antes de usar el sistema en producción.
+
+### Usuarios, roles y correo
+
+- Solo el rol **Admin** gestiona usuarios, turnos y reemplazos. **Usuario final** consulta solo su
+  perfil y sus turnos. El cargo (`Analista`, `Especialista` o `Admin`) no concede permisos.
+- El Admin crea la cuenta con nombres, apellidos, correo, teléfono, cargo y rol; no elige ni ve una
+  contraseña. El usuario la configura desde el enlace de invitación enviado a su correo.
+- Para desarrollo local, `EMAIL_BACKEND=console` deja el enlace en la consola del servidor. Para
+  enviar invitaciones y recuperación de contraseña en producción, configura SMTP en `.env`; ver
+  `.env.example` y [`docs/USUARIOS.md`](docs/USUARIOS.md).
+- Para migrar datos existentes, ejecuta de nuevo `python -m app.db.init_db`: renombra los roles
+  anteriores a `Admin` / `Usuario final` y agrega los tres cargos.
 
 ### Variables de entorno
 
@@ -112,6 +127,10 @@ Ver `.env.example` para el listado completo. Las más relevantes:
 | `ACCESS_TOKEN_EXPIRE_MINUTES`    | Vigencia del access token                                  |
 | `REFRESH_TOKEN_EXPIRE_DAYS`      | Vigencia del refresh token                                 |
 | `CORS_ORIGINS`                   | Orígenes permitidos, separados por coma                    |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`  | Credenciales del primer Admin; solo se aplican si no hay usuarios |
+| `EMAIL_BACKEND`                  | `console` para desarrollo; `smtp` para envío real            |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Credenciales y remitente del correo |
+| `FRONTEND_BASE_URL`              | URL usada para construir enlaces de invitación y recuperación |
 
 ### Pruebas
 
@@ -131,6 +150,7 @@ ver [`docs/TESTING.md`](docs/TESTING.md).
 - `docs/MATRIZ.md` - Matriz de turnos (ciclo de 4 semanas, `matriz_analistas`) y frontend en `/app`
 - `docs/CARGA_MATRIZ.md` - Guía para cargar trabajadores, cargos, turnos y reemplazos (Fase 2)
 - `docs/TESTING.md` - Guía de pruebas
+- `docs/USUARIOS.md` - Roles, cargos, permisos, cuentas y recuperación por correo
 
 ## Licencia
 

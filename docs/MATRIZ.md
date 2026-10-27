@@ -33,8 +33,8 @@ pertenece al día en que empieza.
 Abre **http://localhost:8000/app/** e ingresa con un usuario (ej. `admin`).
 
 - **Semana / Mes**: cada semana es un bloque (lunes a domingo) y las semanas van una debajo de otra, como en el Excel.`n- **Por turno** (color por persona) / **Por persona** (color por turno).
-- Administrador: clic en un turno → **registrar ausencia** (propone al relevo) o **anular el reemplazo**.
-- Administrador: **Generar turnos** aplica el ciclo a un rango de fechas (no pisa cambios manuales).
+- Admin: clic en un turno → **registrar ausencia** (propone al relevo) o **anular el reemplazo**.
+- Admin: **Generar turnos** aplica el ciclo a un rango de fechas (no pisa cambios manuales).
 - Celda rayada = titular ausente; borde punteado con ↪ = cobertura.
 
 ## Usar los datos reales
@@ -68,18 +68,25 @@ con la del Excel. Cambios puntuales: `PUT /matriz/asignaciones` (queda marcado �
 | Método | Ruta | Rol |
 |---|---|---|
 | GET | `/matriz/ciclos` | autenticado |
-| POST | `/matriz/ciclos` | Administrador |
-| POST | `/matriz/ciclos/{id}/generar` | Administrador |
+| POST | `/matriz/ciclos` | Admin |
+| POST | `/matriz/ciclos/{id}/generar` | Admin |
 | GET | `/matriz?desde&hasta&matriz` | autenticado (máx. 93 días) |
-| PUT | `/matriz/asignaciones` | Administrador |
-| DELETE | `/matriz/asignaciones/{id}` | Administrador |
+| GET | `/matriz/asignaciones?desde&hasta` | Admin |
+| PUT | `/matriz/asignaciones` | Admin |
+| PATCH | `/matriz/asignaciones/{id}` | Admin |
+| DELETE | `/matriz/asignaciones/{id}` | Admin |
 
 Las ausencias se registran con `/reemplazos` (Fase 2) y se reflejan automáticamente en la matriz.
 
 ## Altas y bajas de personal
 
-Botón **Personal** (solo Administrador): lista a todas las personas y permite
-**crear trabajador** (con acceso al sistema opcional), **dar / quitar acceso** (usuario y contraseña) y **dar de baja**.
+Botón **Usuarios** (solo rol Admin): permite crear cuentas, editar perfil/cargo/rol, reenviar invitaciones,
+desactivar y reactivar. El Admin nunca crea ni ve contraseñas; el usuario las define por correo.
+También se pueden vincular trabajadores existentes sin duplicar su ficha.
+
+Botón **Asignar turnos** (solo Admin): al seleccionar una celda se puede elegir usuario activo, turno y fecha;
+la misma ventana modifica o elimina una asignación existente. Los usuarios desactivados no aparecen como
+opción y la API los rechaza aunque se envíe una petición directa.
 
 **Si quien sale está en la matriz, el sistema lo advierte** y no deja la baja sin resolver:
 
@@ -88,7 +95,7 @@ Botón **Personal** (solo Administrador): lista a todas las personas y permite
   El reemplazo hereda su puesto (fase o relevo) y sus turnos desde hoy; el historial pasado no cambia.
 - Un **relevo** puede quedar sin cubrir («Dejar el puesto de relevo sin cubrir»); un **titular** no.
 - Se anulan los reemplazos vigentes de la persona que sale. Sus accesos quedan bloqueados.
-- Protecciones: no puedes darte de baja ni quitarte el acceso a ti mismo, ni dejar al sistema sin Administrador activo.
+- Protecciones: no puedes darte de baja ni desactivar tu propio acceso, ni dejar al sistema sin Admin activo.
 - Si algún titular o relevo de la matriz estuviera dado de baja (p. ej. cambios directos en la base), aparece un aviso naranja en la matriz.
 
 API: `GET /trabajadores/{id}/impacto`, `DELETE /trabajadores/{id}?reemplazo_id=N` (o `?sin_relevo=true`),

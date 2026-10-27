@@ -1,4 +1,4 @@
-"""Modelo de Rol (permisos/roles de autorización, ej. Administrador/Trabajador)."""
+"""Modelo de Rol (permisos de autorización: Admin / Usuario final)."""
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
