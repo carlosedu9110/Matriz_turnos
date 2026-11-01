@@ -71,6 +71,11 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .add-assignment { width: 100%; min-height: 28px; border: 1px dashed #9ca3af; background: transparent; color: #6b7280; border-radius: 3px; cursor: pointer; }
 .add-assignment:hover { background: #eff6ff; color: var(--primary); border-color: var(--primary); }
 body:has(#assign-mode.active) .weeks { outline: 2px solid #f59e0b; outline-offset: -2px; }
+.vacation-row .rowhead { background: #d7f0d0 !important; color: #14532d !important; }
+.vacation-row .rowhead small { color: #14532d !important; }
+.vacation-chip { background: #b7d7a8; color: #173a16; border: 1px solid #7ba96a; border-radius: 3px; margin: 1px 0; padding: .3rem .2rem; text-align: center; font-weight: 600; font-size: .78rem; }
+.cell-shift.on-vacation { opacity: .48; text-decoration: line-through; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .7rem; }
 
 /* Semanas apiladas hacia abajo, estilo Excel */
 .weeks { margin: 0 1.2rem 2rem; display: grid; gap: 1.1rem; }

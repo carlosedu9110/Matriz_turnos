@@ -152,7 +152,7 @@ function clickable(node, celda) {
 function renderTurno(tabla, d, dias) {
   const idx = {};
   for (const c of d.celdas) (idx[`${c.fecha}|${c.tipo_turno_id}`] ||= []).push(c);
-  tabla.append(headRow("TIME / DATE", dias), el("tbody", {}, d.tipos_turno.map((t) =>
+  const rows = d.tipos_turno.map((t) =>
     el("tr", {},
       el("td", { class: "rowhead" }, `${hhmm(t.hora_inicio)} – ${hhmm(t.hora_fin)}`, el("small", {}, t.nombre)),
       dias.map((day) => {
@@ -160,7 +160,7 @@ function renderTurno(tabla, d, dias) {
         const td = el("td", { class: "person-cell " + dayCls(day) });
         celdas.forEach((c) => {
           const chip = el("div", {
-            class: "person" + (c.es_reemplazo ? " cover" : "") + (c.manual ? " manual" : ""),
+            class: "person" + (c.es_reemplazo ? " cover" : "") + (c.manual ? " manual" : "") + (c.es_vacaciones ? " on-vacation" : ""),
             style: `background:${colorPersona(c.trabajador.id)};color:${textoPersona(c.trabajador.id)}`,
             title: c.es_reemplazo ? `${c.trabajador.nombres} cubre a ${c.titular.nombres}` : `${c.trabajador.nombres} ${c.trabajador.apellidos}`,
           }, (c.es_reemplazo ? "↪ " : "") + c.trabajador.nombres);
@@ -176,7 +176,10 @@ function renderTurno(tabla, d, dias) {
         }
         return td;
       }),
-    ))));
+    ));
+  const vacacionesRow = filaVacaciones(d, dias);
+  if (vacacionesRow) rows.push(vacacionesRow);
+  tabla.append(headRow("TIME / DATE", dias), el("tbody", {}, rows));
 }
 
 function renderPersona(tabla, d, dias) {
@@ -193,16 +196,16 @@ function renderPersona(tabla, d, dias) {
     if (c.titular) (idx[`${c.titular.id}|${c.fecha}`] ||= []).push({ c, ausente: true });
     (idx[`${c.trabajador.id}|${c.fecha}`] ||= []).push({ c, ausente: false });
   }
-  tabla.append(headRow("Persona", dias), el("tbody", {}, personas.map((p) =>
-    el("tr", {},
-      el("td", { class: "rowhead", title: `${p.nombres} ${p.apellidos}` }, p.nombres, p.nota ? el("small", {}, p.nota) : null),
-      dias.map((day) => {
+  const rows = [];
+  for (const p of personas) {
+    const cells = [];
+    for (const day of dias) {
         const elementos = idx[`${p.id}|${iso(day)}`] || [];
         const td = el("td", { class: dayCls(day) });
         elementos.forEach(({ c, ausente }) => {
           const t = tipos[c.tipo_turno_id];
           const node = el("div", {
-            class: "cell-shift" + (ausente ? " absent" : "") + (c.es_reemplazo && !ausente ? " cover" : ""),
+            class: "cell-shift" + (ausente ? " absent" : "") + (c.es_reemplazo && !ausente ? " cover" : "") + (c.es_vacaciones ? " on-vacation" : ""),
             style: `background:${t.color || "#888"}`,
             title: ausente ? `Ausente · lo cubre ${c.trabajador.nombres}` : c.es_reemplazo ? `Cubre a ${c.titular.nombres}` : t.nombre,
           }, (c.es_reemplazo && !ausente ? "↪ " : "") + t.nombre);
@@ -216,9 +219,36 @@ function renderPersona(tabla, d, dias) {
             onclick: () => openAsignacion(null, { fecha: iso(day), trabajador_id: p.id }),
           }, "+"));
         }
-        return td;
-      })),
-    )));
+        cells.push(td);
+    }
+    rows.push(el("tr", {},
+      el("td", { class: "rowhead", title: `${p.nombres} ${p.apellidos}` }, p.nombres, p.nota ? el("small", {}, p.nota) : null),
+      ...cells,
+    ));
+  }
+  const vacacionesRow = filaVacaciones(d, dias);
+  if (vacacionesRow) rows.push(vacacionesRow);
+  tabla.append(headRow("Persona", dias), el("tbody", {}, rows));
+}
+
+function filaVacaciones(data, dias) {
+  const visibles = data.vacaciones || [];
+  if (!visibles.length) return null;
+  return el("tr", { class: "vacation-row" },
+    el("td", { class: "rowhead" }, "Vacaciones"),
+    dias.map((day) => {
+      const fecha = iso(day);
+      const activas = visibles.filter((v) => v.fecha_inicio <= fecha && fecha <= v.fecha_fin);
+      return el("td", { class: "person-cell " + dayCls(day) }, activas.map((v) =>
+        el("div", {
+          class: "vacation-chip",
+          title: v.reemplazante
+            ? `${v.trabajador.nombres}: vacaciones · cubre ${v.reemplazante.nombres}`
+            : `${v.trabajador.nombres}: vacaciones aprobadas, sin reemplazo asignado`,
+        }, `${v.reemplazante ? "↪ " : ""}${v.trabajador.nombres}`),
+      ));
+    }),
+  );
 }
 
 // ---- Diálogos ----
@@ -486,6 +516,129 @@ function renderAlertas() {
     ? `⚠ Hay personas dadas de baja en la matriz: ${faltan.join("; ")}. ` +
       (state.isAdmin ? "Reemplázalas desde «Personal»." : "Avisa a un administrador.")
     : "";
+}
+
+// ---- Vacaciones: solicitud personal y revisión exclusiva del Admin ----
+function fechaLegible(fecha) {
+  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" }).format(parse(fecha));
+}
+
+async function openVacaciones() {
+  let solicitudes;
+  try { solicitudes = await Api.get("/vacaciones"); }
+  catch (e) { return toast(e.message, true); }
+
+  const rows = solicitudes.map((v) => {
+    const accion = (label, fn, cls = "") => el("button", {
+      class: `btn ${cls}`, type: "button", onclick: fn,
+    }, label);
+    const controles = [];
+    if (state.isAdmin && v.estado === "pendiente") {
+      controles.push(accion("Aprobar", () => decidirVacacion(v), "primary"));
+      controles.push(accion("Rechazar", () => rechazarVacacion(v), "danger"));
+    } else if (!state.isAdmin && v.estado === "pendiente") {
+      controles.push(accion("Cancelar solicitud", async () => {
+        try { await Api.del(`/vacaciones/${v.id}`); toast("Solicitud cancelada"); openVacaciones(); }
+        catch (e) { toast(e.message, true); }
+      }, "danger"));
+    }
+    return el("tr", {},
+      state.isAdmin ? el("td", {}, `${v.trabajador.nombres} ${v.trabajador.apellidos}`) : null,
+      el("td", {}, `${fechaLegible(v.fecha_inicio)} – ${fechaLegible(v.fecha_fin)}`),
+      el("td", {}, v.motivo || "—"),
+      el("td", {}, el("span", { class: `badge ${v.estado === "aprobada" ? "ok" : v.estado === "rechazada" ? "off" : ""}` }, v.estado)),
+      el("td", {}, v.reemplazo_id ? "Reemplazo asignado" : (v.estado === "aprobada" ? "Sin reemplazo" : "—")),
+      el("td", {}, v.nota_admin || "—"),
+      el("td", {}, el("div", { class: "row-actions" }, controles)),
+    );
+  });
+  const headers = [
+    ...(state.isAdmin ? [el("th", {}, "Persona")] : []),
+    el("th", {}, "Periodo"), el("th", {}, "Motivo"), el("th", {}, "Estado"),
+    el("th", {}, "Cobertura"), el("th", {}, "Nota del Admin"), el("th", {}, "Acciones"),
+  ];
+  openDialog(
+    el("h2", {}, state.isAdmin ? "Solicitudes de vacaciones" : "Mis vacaciones"),
+    !state.isAdmin ? formSolicitudVacaciones() : el("p", { class: "muted" },
+      "Revisa las solicitudes. Al aprobar puedes asignar un reemplazante activo; si no eliges uno, la matriz marcará los días sin cobertura."),
+    el("div", { class: "table-scroll" }, el("table", { class: "personal-table" },
+      el("thead", {}, el("tr", {}, headers)),
+      el("tbody", {}, rows.length ? rows : [el("tr", {}, el("td", { colspan: state.isAdmin ? "7" : "6" }, "No hay solicitudes de vacaciones."))]))),
+    el("div", { class: "actions" }, cancelBtn()),
+  );
+  $("dlg").classList.add("wide");
+}
+
+function formSolicitudVacaciones() {
+  const desde = el("input", { type: "date", required: "", min: iso(new Date()) });
+  const hasta = el("input", { type: "date", required: "", min: iso(new Date()) });
+  const motivo = el("textarea", { maxlength: "500", rows: "2", placeholder: "Opcional" });
+  return el("details", { class: "nuevo", open: "" },
+    el("summary", {}, "＋ Solicitar vacaciones"),
+    el("div", { class: "form-grid" },
+      el("label", {}, "Desde", desde),
+      el("label", {}, "Hasta", hasta),
+      el("label", {}, "Motivo (opcional)", motivo)),
+    el("button", { class: "btn primary", type: "button", onclick: async () => {
+      if (!desde.value || !hasta.value) return toast("Selecciona las fechas de inicio y fin", true);
+      try {
+        await Api.post("/vacaciones", {
+          fecha_inicio: desde.value,
+          fecha_fin: hasta.value,
+          motivo: motivo.value.trim() || null,
+        });
+        toast("Solicitud enviada al Admin");
+        openVacaciones();
+      } catch (e) { toast(e.message, true); }
+    } }, "Enviar solicitud"),
+  );
+}
+
+async function decidirVacacion(v) {
+  let usuarios = [];
+  try { usuarios = await Api.get("/usuarios?activo=true"); }
+  catch (e) { return toast(e.message, true); }
+  const candidatos = usuarios.filter((u) => u.trabajador_id !== v.trabajador_id);
+  const reemplazo = el("select", {}, el("option", { value: "" }, "Sin reemplazo"),
+    ...candidatos.map((u) => el("option", { value: u.trabajador_id }, `${u.nombres} ${u.apellidos} · ${u.cargo || "sin cargo"}`)));
+  const nota = el("textarea", { maxlength: "2000", rows: "2", placeholder: "Nota para el usuario (opcional)" });
+  openDialog(
+    el("h2", {}, "Aprobar vacaciones"),
+    el("p", {}, `${v.trabajador.nombres} · ${fechaLegible(v.fecha_inicio)} – ${fechaLegible(v.fecha_fin)}`),
+    el("label", {}, "Reemplazante (opcional)", reemplazo),
+    el("label", {}, "Nota del Admin", nota),
+    el("div", { class: "actions" }, cancelBtn(),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try {
+          await Api.patch(`/vacaciones/${v.id}`, {
+            estado: "aprobada",
+            nota_admin: nota.value.trim() || null,
+            reemplazante_id: reemplazo.value ? Number(reemplazo.value) : null,
+          });
+          toast("Vacaciones aprobadas");
+          load();
+          openVacaciones();
+        } catch (e) { toast(e.message, true); }
+      } }, "Aprobar")),
+  );
+}
+
+function rechazarVacacion(v) {
+  const nota = el("textarea", { maxlength: "2000", rows: "3", required: "", placeholder: "Explica brevemente el motivo" });
+  openDialog(
+    el("h2", {}, "Rechazar solicitud"),
+    el("p", {}, `${v.trabajador.nombres} · ${fechaLegible(v.fecha_inicio)} – ${fechaLegible(v.fecha_fin)}`),
+    el("label", {}, "Motivo", nota),
+    el("div", { class: "actions" }, cancelBtn(),
+      el("button", { class: "btn danger", type: "button", onclick: async () => {
+        if (!nota.value.trim()) return toast("Indica el motivo del rechazo", true);
+        try {
+          await Api.patch(`/vacaciones/${v.id}`, { estado: "rechazada", nota_admin: nota.value.trim() });
+          toast("Solicitud rechazada");
+          openVacaciones();
+        } catch (e) { toast(e.message, true); }
+      } }, "Rechazar")),
+  );
 }
 
 // ---- Gestión administrativa de usuarios (los roles se comprueban también en la API) ----
@@ -865,6 +1018,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("today").onclick = () => { state.anchor = new Date(); load(); };
   $("generate").onclick = openGenerar;
   $("users").onclick = openPersonal;
+  $("vacations").onclick = openVacaciones;
   $("assign-mode").onclick = () => {
     state.assignmentMode = !state.assignmentMode;
     $("assign-mode").classList.toggle("active", state.assignmentMode);

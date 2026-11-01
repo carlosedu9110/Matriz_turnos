@@ -87,6 +87,21 @@ Además: CHECK `trabajador_ausente_id <> trabajador_reemplazo_id` e índice (ree
 | activo          | BOOLEAN      | NOT NULL, default true                                    |
 | trabajador_id   | INT FK       | → `trabajadores.id`, UNIQUE, ON DELETE CASCADE, NOT NULL  |
 
+### `vacaciones`
+| Columna       | Tipo         | Restricciones |
+|---|---|---|
+| id | INT PK | autoincrement |
+| trabajador_id | INT FK | → `trabajadores.id`, NOT NULL, index |
+| fecha_inicio / fecha_fin | DATE | NOT NULL, CHECK `fecha_fin >= fecha_inicio` |
+| motivo | VARCHAR(500) | NULL |
+| estado | VARCHAR(20) | `pendiente`, `aprobada`, `rechazada` o `cancelada` |
+| nota_admin | TEXT | NULL |
+| reemplazo_id | INT FK | → `reemplazos.id`, UNIQUE, NULL |
+| creado_en / actualizado_en | DATETIME | gestionados por el servidor |
+
+Solo las solicitudes aprobadas se muestran como vacaciones en la matriz. La referencia de reemplazo es
+opcional; una aprobación sin cobertura se señala visualmente.
+
 ## Relaciones
 
 - `Area` 1—N `Cargo`, `Area` 1—N `Trabajador`
@@ -95,6 +110,7 @@ Además: CHECK `trabajador_ausente_id <> trabajador_reemplazo_id` e índice (ree
   único trabajador — `trabajador_id` es `UNIQUE`)
 - `Usuario` N—M `Rol` a través de `usuario_rol`
 - `Reemplazo` N—1 `Trabajador` (ausente), N—1 `Trabajador` (reemplazante), N—1 `TipoTurno` (opcional)
+- `Vacacion` N—1 `Trabajador`; puede tener 0 o 1 reemplazo asociado al aprobarse.
 
 ### Matriz de turnos (Fase 3)
 
@@ -118,8 +134,10 @@ erDiagram
     AREA ||--o{ TRABAJADOR : "agrupa"
     CARGO ||--o{ TRABAJADOR : "asigna"
     TRABAJADOR ||--o| USUARIO : "puede tener"
+    TRABAJADOR ||--o{ VACACION : "solicita"
     TRABAJADOR ||--o{ REEMPLAZO : "es cubierto en"
     TIPO_TURNO ||--o{ REEMPLAZO : "aplica a"
+    REEMPLAZO o|--o| VACACION : "cubre"
     USUARIO ||--o{ USUARIO_ROL : "recibe"
     ROL ||--o{ USUARIO_ROL : "asigna"
 
@@ -154,6 +172,14 @@ erDiagram
     USUARIO_ROL {
         int usuario_id PK, FK
         int rol_id PK, FK
+    }
+    VACACION {
+        int id PK
+        int trabajador_id FK
+        int reemplazo_id FK
+        date fecha_inicio
+        date fecha_fin
+        string estado
     }
     REEMPLAZO {
         int id PK

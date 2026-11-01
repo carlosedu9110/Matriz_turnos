@@ -80,6 +80,7 @@ def ver_matriz(
         resultado.celdas = [
             c for c in resultado.celdas if c.trabajador.id == mio or (c.titular is not None and c.titular.id == mio)
         ]
+        resultado.vacaciones = [v for v in resultado.vacaciones if v.trabajador_id == mio]
         resultado.ciclo = _ciclo_publico(ciclo) if ciclo else None
     return resultado
 

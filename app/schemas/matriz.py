@@ -4,6 +4,7 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.catalogos import TipoTurnoOut
+from app.schemas.vacacion import VacacionMatriz
 
 
 class ParticipanteIn(BaseModel):
@@ -123,6 +124,7 @@ class CeldaOut(BaseModel):
     titular: PersonaMini | None = None
     reemplazo_id: int | None = None
     manual: bool = False
+    es_vacaciones: bool = False
 
 
 class MatrizOut(BaseModel):
@@ -131,3 +133,4 @@ class MatrizOut(BaseModel):
     tipos_turno: list[TipoTurnoOut]
     celdas: list[CeldaOut]
     ciclo: CicloOut | None = None
+    vacaciones: list[VacacionMatriz] = Field(default_factory=list)

@@ -56,6 +56,8 @@ app/
   `require_roles("Admin")`; los permisos nunca dependen del cargo laboral.
 - `Usuario final` solo puede consultar su propio perfil y las asignaciones donde participa. Las
   restricciones se aplican en los endpoints, no solo en los botones de la interfaz.
+- Las vacaciones tienen su propio router y servicio: el usuario solicita/cancela solicitudes pendientes;
+  el Admin aprueba/rechaza y puede asignar cobertura. Solo las aprobadas se proyectan en la matriz.
 
 ## Modelo de dominio (Fase 1)
 

@@ -12,8 +12,10 @@ from app.models import (
     Reemplazo,
     TipoTurno,
     Trabajador,
+    Vacacion,
 )
 from app.schemas.matriz import CeldaOut, CicloCreate, GenerarIn, GenerarOut, MatrizOut, PersonaMini
+from app.schemas.vacacion import PersonaVacacion, VacacionMatriz
 from app.services.common import commit_or_409, get_or_404
 
 M, T, N = "Mañana", "Tarde", "Noche"
@@ -159,4 +161,49 @@ def construir_matriz(db: Session, desde: date, hasta: date, ciclo: CicloTurno | 
             )
         )
     tipos = db.query(TipoTurno).filter(TipoTurno.activo.is_(True)).order_by(TipoTurno.hora_inicio).all()
-    return MatrizOut(desde=desde, hasta=hasta, tipos_turno=tipos, celdas=celdas, ciclo=ciclo)
+    vacaciones_query = (
+        db.query(Vacacion)
+        .options(
+            joinedload(Vacacion.trabajador),
+            joinedload(Vacacion.reemplazo).joinedload(Reemplazo.trabajador_reemplazo),
+        )
+        .filter(
+            Vacacion.estado == "aprobada",
+            Vacacion.fecha_inicio <= hasta,
+            Vacacion.fecha_fin >= desde,
+        )
+    )
+    if ciclo is not None:
+        participating_ids = {p.trabajador_id for p in ciclo.participantes}
+        participating_ids.update(p.relevo_id for p in ciclo.participantes if p.relevo_id is not None)
+        vacaciones_query = vacaciones_query.filter(Vacacion.trabajador_id.in_(participating_ids))
+    vacaciones_db = vacaciones_query.order_by(Vacacion.fecha_inicio).all()
+    vacaciones = []
+    for v in vacaciones_db:
+        vacaciones.append(
+            VacacionMatriz(
+                id=v.id,
+                trabajador_id=v.trabajador_id,
+                trabajador=PersonaVacacion.model_validate(v.trabajador),
+                fecha_inicio=v.fecha_inicio,
+                fecha_fin=v.fecha_fin,
+                estado="aprobada",
+                reemplazante=(
+                    PersonaVacacion.model_validate(v.reemplazo.trabajador_reemplazo) if v.reemplazo else None
+                ),
+            )
+        )
+    for celda in celdas:
+        titular_id = celda.titular.id if celda.es_reemplazo and celda.titular else celda.trabajador.id
+        celda.es_vacaciones = any(
+            v.trabajador_id == titular_id and v.fecha_inicio <= celda.fecha <= v.fecha_fin
+            for v in vacaciones_db
+        )
+    return MatrizOut(
+        desde=desde,
+        hasta=hasta,
+        tipos_turno=tipos,
+        celdas=celdas,
+        ciclo=ciclo,
+        vacaciones=vacaciones,
+    )

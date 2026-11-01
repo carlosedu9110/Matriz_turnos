@@ -7,7 +7,7 @@ Aplicación web para la gestión integral de turnos, vacaciones, reemplazos y ho
 ## Características
 
 - ✅ Matriz de turnos interactiva (vistas día/semana/mes)
-- ✅ Gestión de vacaciones
+- ✅ Gestión de vacaciones (solicitudes, aprobación Admin y cobertura en la matriz)
 - ✅ Gestión de reemplazos
 - ✅ Registro y validación de horas extras
 - ✅ Cálculo automático según legislación colombiana
@@ -40,7 +40,7 @@ Ver `docs/ARCHITECTURE.md` para la documentación completa de arquitectura.
 1. **Fase 1**: Base del proyecto + BD + Autenticación
 2. **Fase 2**: Gestión de trabajadores y reemplazos
 3. **Fase 3**: Matriz de turnos
-4. **Fase 4**: Vacaciones
+4. **Fase 4**: Vacaciones (implementada)
 5. **Fase 5**: Reemplazos
 6. **Fase 6**: Horas extras
 7. **Fase 7**: Validaciones laborales
@@ -148,6 +148,7 @@ ver [`docs/TESTING.md`](docs/TESTING.md).
 - `docs/ARCHITECTURE.md` - Diseño completo del sistema (Fase 1)
 - `docs/DATABASE.md` - Esquema de base de datos y diagrama de relaciones
 - `docs/MATRIZ.md` - Matriz de turnos (ciclo de 4 semanas, `matriz_analistas`) y frontend en `/app`
+- `docs/VACACIONES.md` - Solicitud, aprobación y cobertura de vacaciones
 - `docs/CARGA_MATRIZ.md` - Guía para cargar trabajadores, cargos, turnos y reemplazos (Fase 2)
 - `docs/TESTING.md` - Guía de pruebas
 - `docs/USUARIOS.md` - Roles, cargos, permisos, cuentas y recuperación por correo

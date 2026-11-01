@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import auth, catalogos, health, matriz, reemplazos, trabajadores, usuarios
+from app.api.routers import auth, catalogos, health, matriz, reemplazos, trabajadores, usuarios, vacaciones
 from app.config import settings
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
@@ -26,6 +26,7 @@ app.include_router(trabajadores.router)
 app.include_router(usuarios.router)
 app.include_router(reemplazos.router)
 app.include_router(matriz.router)
+app.include_router(vacaciones.router)
 
 # Frontend estático (HTML/CSS/JS vanilla) disponible en /app
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
