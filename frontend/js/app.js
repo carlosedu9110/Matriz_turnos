@@ -65,12 +65,30 @@ function weeksOf(dias) {
   return out;
 }
 
-// Color estable por persona (como en el Excel): se deriva del id del trabajador.
-const PALETA = ["#111111", "#ffdf00", "#353535", "#f7e66b", "#5a5a5a", "#d9bd00", "#777777", "#fff0a3", "#242424", "#c5ad12"];
-const colorPersona = (id) => PALETA[id % PALETA.length];
-const textoPersona = (id) => (["#ffdf00", "#f7e66b", "#fff0a3", "#d9bd00", "#c5ad12"].includes(colorPersona(id)) ? "#111" : "#fff");
-const colorTurno = (turno) => turno.nombre === "Mañana" ? "#ffdf00" : turno.nombre === "Tarde" ? "#252525" : "#686868";
-const textoTurno = (turno) => turno.nombre === "Mañana" ? "#111" : "#fff";
+// Color estable por usuario: un ángulo áureo distribuye los tonos y evita reciclar una paleta corta.
+function colorPersona(id) {
+  const h = ((Number(id) || 0) * 137.508) % 360;
+  const s = 0.78;
+  const l = 0.46;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return `#${[r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function textoPersona(id) {
+  const rgb = colorPersona(id).slice(1).match(/.{2}/g).map((v) => parseInt(v, 16) / 255)
+    .map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  const luminancia = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  return luminancia > 0.179 ? "#111" : "#fff";
+}
 
 async function load() {
   const [desde, hasta] = range();
@@ -102,17 +120,18 @@ function render() {
     : "No hay turnos en este periodo." + (state.isAdmin ? " Usa «Generar turnos»." : "");
   if (!d) return;
 
-  const leyenda = [];
-  if (state.layout === "turno") {
-    const vistos = new Map();
-    d.celdas.forEach((c) => vistos.set(c.trabajador.id, c.trabajador));
-    [...vistos.values()]
-      .sort((x, y) => x.nombres.localeCompare(y.nombres))
-      .forEach((p) => leyenda.push(el("span", {}, el("i", { class: "dot", style: `background:${colorPersona(p.id)}` }), p.nombres)));
-  } else {
-    d.tipos_turno.forEach((t) =>
-    leyenda.push(el("span", {}, el("i", { class: "dot", style: `background:${colorTurno(t)}` }), `${t.nombre} ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`)));
-  }
+  const personasLeyenda = new Map();
+  d.celdas.forEach((c) => {
+    personasLeyenda.set(c.trabajador.id, c.trabajador);
+    if (c.titular) personasLeyenda.set(c.titular.id, c.titular);
+  });
+  (d.ciclo?.participantes || []).forEach((p) => {
+    personasLeyenda.set(p.trabajador.id, p.trabajador);
+    if (p.relevo) personasLeyenda.set(p.relevo.id, p.relevo);
+  });
+  const leyenda = [...personasLeyenda.values()]
+    .sort((x, y) => x.nombres.localeCompare(y.nombres))
+    .map((p) => el("span", {}, el("i", { class: "dot", style: `background:${colorPersona(p.id)}` }), p.nombres));
   leyenda.push(el("span", {}, el("i", { class: "dot", style: "background:#888;outline:2px dashed #444" }), "↪ Cobertura (reemplazo)"));
   $("legend").append(...leyenda);
   if (vacio) return;
@@ -208,7 +227,7 @@ function renderPersona(tabla, d, dias) {
           const t = tipos[c.tipo_turno_id];
           const node = el("div", {
             class: "cell-shift" + (ausente ? " absent" : "") + (c.es_reemplazo && !ausente ? " cover" : "") + (c.es_vacaciones ? " on-vacation" : ""),
-            style: `background:${colorTurno(t)};color:${textoTurno(t)}`,
+            style: `background:${colorPersona(p.id)};color:${textoPersona(p.id)}`,
             title: ausente ? `Ausente · lo cubre ${c.trabajador.nombres}` : c.es_reemplazo ? `Cubre a ${c.titular.nombres}` : t.nombre,
           }, (c.es_reemplazo && !ausente ? "↪ " : "") + t.nombre);
           td.append(clickable(node, c));
