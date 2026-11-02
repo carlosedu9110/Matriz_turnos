@@ -66,9 +66,11 @@ function weeksOf(dias) {
 }
 
 // Color estable por persona (como en el Excel): se deriva del id del trabajador.
-const PALETA = ["#548235", "#F4B183", "#00B0F0", "#FF0000", "#8E7CC3", "#E6B800", "#2E9E9E", "#D56AA0", "#7F7F7F", "#C55A11"];
+const PALETA = ["#111111", "#ffdf00", "#353535", "#f7e66b", "#5a5a5a", "#d9bd00", "#777777", "#fff0a3", "#242424", "#c5ad12"];
 const colorPersona = (id) => PALETA[id % PALETA.length];
-const textoPersona = (id) => (["#F4B183", "#E6B800", "#00B0F0"].includes(colorPersona(id)) ? "#111" : "#fff");
+const textoPersona = (id) => (["#ffdf00", "#f7e66b", "#fff0a3", "#d9bd00", "#c5ad12"].includes(colorPersona(id)) ? "#111" : "#fff");
+const colorTurno = (turno) => turno.nombre === "Mañana" ? "#ffdf00" : turno.nombre === "Tarde" ? "#252525" : "#686868";
+const textoTurno = (turno) => turno.nombre === "Mañana" ? "#111" : "#fff";
 
 async function load() {
   const [desde, hasta] = range();
@@ -109,7 +111,7 @@ function render() {
       .forEach((p) => leyenda.push(el("span", {}, el("i", { class: "dot", style: `background:${colorPersona(p.id)}` }), p.nombres)));
   } else {
     d.tipos_turno.forEach((t) =>
-      leyenda.push(el("span", {}, el("i", { class: "dot", style: `background:${t.color || "#888"}` }), `${t.nombre} ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`)));
+    leyenda.push(el("span", {}, el("i", { class: "dot", style: `background:${colorTurno(t)}` }), `${t.nombre} ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`)));
   }
   leyenda.push(el("span", {}, el("i", { class: "dot", style: "background:#888;outline:2px dashed #444" }), "↪ Cobertura (reemplazo)"));
   $("legend").append(...leyenda);
@@ -206,7 +208,7 @@ function renderPersona(tabla, d, dias) {
           const t = tipos[c.tipo_turno_id];
           const node = el("div", {
             class: "cell-shift" + (ausente ? " absent" : "") + (c.es_reemplazo && !ausente ? " cover" : "") + (c.es_vacaciones ? " on-vacation" : ""),
-            style: `background:${t.color || "#888"}`,
+            style: `background:${colorTurno(t)};color:${textoTurno(t)}`,
             title: ausente ? `Ausente · lo cubre ${c.trabajador.nombres}` : c.es_reemplazo ? `Cubre a ${c.titular.nombres}` : t.nombre,
           }, (c.es_reemplazo && !ausente ? "↪ " : "") + t.nombre);
           td.append(clickable(node, c));
