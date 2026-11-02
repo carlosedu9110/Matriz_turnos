@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.core.security import hash_password
-from app.models import Asignacion, Reemplazo, Rol, TipoTurno, Trabajador, Usuario
+from app.models import Asignacion, Reemplazo, Rol, TipoTurno, Trabajador, Usuario, Vacacion
 from app.services.matriz_service import sembrar_tipos_turno
 
 
@@ -155,6 +155,51 @@ def test_aprobar_sin_reemplazo_se_refleja_en_matriz(client, admin_headers, user_
         headers=user_headers,
     ).json()
     assert len(propia["vacaciones"]) == 1
+
+
+def test_generacion_ciclica_no_asigna_durante_vacaciones_aprobadas(
+    client, admin_headers, vacation_accounts, sample_user, db_session
+):
+    lunes = date.today() - timedelta(days=date.today().weekday())
+    miercoles = lunes + timedelta(days=2)
+    personas = [*vacation_accounts["trabajadores"], sample_user.trabajador]
+    sembrar_tipos_turno(db_session)
+    ciclo = client.post(
+        "/matriz/ciclos",
+        headers=admin_headers,
+        json={
+            "codigo": "matriz_vacaciones_test",
+            "nombre": "Matriz vacaciones test",
+            "fecha_ancla": lunes.isoformat(),
+            "participantes": [
+                {"trabajador_id": persona.id, "fase": fase}
+                for fase, persona in enumerate(personas, start=1)
+            ],
+        },
+    )
+    assert ciclo.status_code == 201
+    trabajador = personas[0]
+    db_session.add(Vacacion(
+        trabajador_id=trabajador.id,
+        fecha_inicio=miercoles,
+        fecha_fin=miercoles,
+        estado="aprobada",
+    ))
+    db_session.commit()
+    generated = client.post(
+        f"/matriz/ciclos/{ciclo.json()['id']}/generar",
+        headers=admin_headers,
+        json={"desde": miercoles.isoformat(), "hasta": miercoles.isoformat()},
+    )
+    assert generated.status_code == 200 and generated.json()["omitidas"] == 1
+    assert db_session.query(Asignacion).filter_by(trabajador_id=trabajador.id, fecha=miercoles).count() == 0
+    turno = db_session.query(TipoTurno).filter_by(nombre="Mañana").one()
+    puntual = client.put(
+        "/matriz/asignaciones",
+        headers=admin_headers,
+        json={"trabajador_id": trabajador.id, "fecha": miercoles.isoformat(), "tipo_turno_id": turno.id},
+    )
+    assert puntual.status_code == 409
 
 
 def test_aprobar_con_reemplazante_crea_cobertura(client, admin_headers, user_headers, vacation_accounts, fechas):

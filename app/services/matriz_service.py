@@ -13,6 +13,7 @@ from app.models import (
     TipoTurno,
     Trabajador,
     Vacacion,
+    Vacacion,
 )
 from app.schemas.matriz import CeldaOut, CicloCreate, GenerarIn, GenerarOut, MatrizOut, PersonaMini
 from app.schemas.vacacion import PersonaVacacion, VacacionMatriz
@@ -89,6 +90,16 @@ def crear_ciclo(db: Session, datos: CicloCreate) -> CicloTurno:
 
 def generar_asignaciones(db: Session, ciclo: CicloTurno, datos: GenerarIn) -> GenerarOut:
     plantilla = {(p.semana, p.dia_semana): p.tipo_turno_id for p in ciclo.plantilla}
+    participante_ids = [p.trabajador_id for p in ciclo.participantes]
+    vacaciones: dict[int, list[tuple[date, date]]] = {}
+    solicitudes = db.query(Vacacion).filter(
+        Vacacion.trabajador_id.in_(participante_ids),
+        Vacacion.estado == "aprobada",
+        Vacacion.fecha_inicio <= datos.hasta,
+        Vacacion.fecha_fin >= datos.desde,
+    ).all()
+    for v in solicitudes:
+        vacaciones.setdefault(v.trabajador_id, []).append((v.fecha_inicio, v.fecha_fin))
     existentes = {
         (a.trabajador_id, a.fecha): a
         for a in db.query(Asignacion).filter(Asignacion.fecha.between(datos.desde, datos.hasta))
@@ -101,6 +112,9 @@ def generar_asignaciones(db: Session, ciclo: CicloTurno, datos: GenerarIn) -> Ge
                 continue  # nunca se asigna a personas desactivadas
             turno_id = plantilla.get((semana_de_ciclo(ciclo.fecha_ancla, part.fase, dia), dia.weekday()))
             if turno_id is None:
+                continue
+            if any(desde <= dia <= hasta for desde, hasta in vacaciones.get(part.trabajador_id, [])):
+                omitidas += 1
                 continue
             actual = existentes.get((part.trabajador_id, dia))
             if actual is None:

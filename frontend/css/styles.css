@@ -77,6 +77,11 @@ body:has(#assign-mode.active) .weeks { outline: 2px solid var(--black); outline-
 .vacation-chip { background: var(--yellow-soft); color: var(--black); border: 1px solid var(--black); border-radius: 3px; margin: 1px 0; padding: .3rem .2rem; text-align: center; font-weight: 650; font-size: .78rem; }
 .cell-shift.on-vacation { opacity: .48; text-decoration: line-through; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .7rem; }
+.weekday-fieldset { border: 1px solid var(--line); border-radius: 8px; padding: .6rem .8rem; }
+.weekday-fieldset legend { font-weight: 650; }
+.weekday-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+.weekday-check { display: inline-flex; align-items: center; gap: .25rem; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.checkbox-row { display: flex; align-items: center; gap: .5rem; }
 
 /* Semanas apiladas hacia abajo, estilo Excel */
 .weeks { margin: 0 1.2rem 2rem; display: grid; gap: 1.1rem; }

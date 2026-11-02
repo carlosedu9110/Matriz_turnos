@@ -113,6 +113,33 @@ class AsignacionUpdate(BaseModel):
     tipo_turno_id: int | None = None
 
 
+class AsignacionMasivaIn(BaseModel):
+    trabajador_id: int
+    tipo_turno_id: int
+    desde: date
+    hasta: date
+    dias_semana: list[int] = Field(default_factory=lambda: list(range(7)))
+    sobrescribir: bool = False
+
+    @model_validator(mode="after")
+    def _validar(self):
+        if self.hasta < self.desde:
+            raise ValueError("hasta no puede ser anterior a desde")
+        if (self.hasta - self.desde).days > 365:
+            raise ValueError("El rango máximo es de 366 días")
+        if not self.dias_semana or any(dia < 0 or dia > 6 for dia in self.dias_semana):
+            raise ValueError("Selecciona al menos un día válido de la semana (0=lunes, 6=domingo)")
+        if len(set(self.dias_semana)) != len(self.dias_semana):
+            raise ValueError("No repitas días de la semana")
+        return self
+
+
+class AsignacionMasivaOut(BaseModel):
+    creadas: int
+    actualizadas: int
+    omitidas: int
+
+
 class CeldaOut(BaseModel):
     """Una persona trabajando un turno en una fecha. Si es cobertura, `titular` es a quien cubre."""
 

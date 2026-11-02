@@ -951,6 +951,63 @@ async function openAsignacion(celda = null, sugerido = {}) {
   );
 }
 
+async function openAsignacionMasiva() {
+  let usuarios;
+  try { usuarios = await Api.get("/usuarios?activo=true"); }
+  catch (e) { return toast(e.message, true); }
+  if (!usuarios.length) return toast("Crea un usuario activo antes de asignarle turnos", true);
+  const trabajador = el("select", {}, ...usuarios.map((u) =>
+    el("option", { value: u.trabajador_id }, `${u.nombres} ${u.apellidos} · ${u.cargo || "sin cargo"}`)));
+  const turnos = state.data?.tipos_turno || [];
+  if (!turnos.length) return toast("No hay tipos de turno activos", true);
+  const tipo = el("select", {}, ...turnos.map((t) =>
+    el("option", { value: t.id }, `${t.nombre} · ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`)));
+  const desde = el("input", { type: "date", required: "", value: iso(range()[0]) });
+  const hasta = el("input", { type: "date", required: "", value: iso(range()[1]) });
+  const semana = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+  const checks = semana.map((dia, i) => {
+    const input = el("input", { type: "checkbox", checked: "", value: i });
+    return el("label", { class: "weekday-check" }, input, dia);
+  });
+  const sobrescribir = el("input", { type: "checkbox" });
+  openDialog(
+    el("h2", {}, "Asignación masiva"),
+    el("p", { class: "muted" }, "Asigna el mismo turno a una persona entre las fechas elegidas. Puedes limitarlo a ciertos días."),
+    el("label", {}, "Usuario activo", trabajador),
+    el("label", {}, "Turno", tipo),
+    el("div", { class: "form-grid" }, el("label", {}, "Desde", desde), el("label", {}, "Hasta", hasta)),
+    el("fieldset", { class: "weekday-fieldset" },
+      el("legend", {}, "Días de la semana"),
+      el("div", { class: "weekday-list" }, checks)),
+    el("label", { class: "checkbox-row" }, sobrescribir, "Sobrescribir asignaciones existentes del usuario"),
+    el("p", { class: "muted" }, "Si no marcas sobrescribir, las fechas que ya tienen un turno se conservan y se cuentan como omitidas."),
+    el("div", { class: "actions" }, cancelBtn(),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        const dias_semana = checks
+          .filter((c) => c.querySelector("input").checked)
+          .map((c) => Number(c.querySelector("input").value));
+        if (!desde.value || !hasta.value || hasta.value < desde.value) {
+          return toast("Revisa las fechas: el fin debe ser igual o posterior al inicio", true);
+        }
+        if (!dias_semana.length) return toast("Selecciona al menos un día de la semana", true);
+        try {
+          const resultado = await Api.post("/matriz/asignaciones/masivas", {
+            trabajador_id: Number(trabajador.value),
+            tipo_turno_id: Number(tipo.value),
+            desde: desde.value,
+            hasta: hasta.value,
+            dias_semana,
+            sobrescribir: sobrescribir.checked,
+          });
+          closeDialog();
+          toast(`Asignación masiva: ${resultado.creadas} nuevas, ${resultado.actualizadas} modificadas, ${resultado.omitidas} omitidas`);
+          load();
+        } catch (e) { toast(e.message, true); }
+      } }, "Aplicar al rango")),
+  );
+  $("dlg").classList.add("wide");
+}
+
 function openForgotPassword() {
   const email = el("input", { type: "email", autocomplete: "email", required: "", placeholder: "correo@empresa.com" });
   openDialog(
@@ -1040,6 +1097,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("generate").onclick = openGenerar;
   $("users").onclick = openPersonal;
   $("vacations").onclick = openVacaciones;
+  $("bulk-assign").onclick = openAsignacionMasiva;
   $("assign-mode").onclick = () => {
     state.assignmentMode = !state.assignmentMode;
     $("assign-mode").classList.toggle("active", state.assignmentMode);

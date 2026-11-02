@@ -72,11 +72,28 @@ con la del Excel. Cambios puntuales: `PUT /matriz/asignaciones` (queda marcado �
 | POST | `/matriz/ciclos/{id}/generar` | Admin |
 | GET | `/matriz?desde&hasta&matriz` | autenticado (máx. 93 días) |
 | GET | `/matriz/asignaciones?desde&hasta` | Admin |
+| POST | `/matriz/asignaciones/masivas` | Admin (rango máximo: 366 días) |
 | PUT | `/matriz/asignaciones` | Admin |
 | PATCH | `/matriz/asignaciones/{id}` | Admin |
 | DELETE | `/matriz/asignaciones/{id}` | Admin |
 
 Las ausencias se registran con `/reemplazos` (Fase 2) y se reflejan automáticamente en la matriz.
+
+Solicitud masiva (`POST /matriz/asignaciones/masivas`):
+
+```json
+{
+  "trabajador_id": 12,
+  "tipo_turno_id": 1,
+  "desde": "2026-11-02",
+  "hasta": "2026-11-30",
+  "dias_semana": [0, 1, 2, 3, 4],
+  "sobrescribir": false
+}
+```
+
+`dias_semana` usa 0=lunes … 6=domingo; si se omite, se incluyen todos los días. La respuesta informa
+`creadas`, `actualizadas` y `omitidas`. Las fechas con vacaciones aprobadas nunca reciben una nueva asignación.
 
 ## Altas y bajas de personal
 
@@ -85,7 +102,9 @@ desactivar y reactivar. El Admin nunca crea ni ve contraseñas; el usuario las d
 También se pueden vincular trabajadores existentes sin duplicar su ficha.
 
 Botón **Asignar turnos** (solo Admin): al seleccionar una celda se puede elegir usuario activo, turno y fecha;
-la misma ventana modifica o elimina una asignación existente. Los usuarios desactivados no aparecen como
+la misma ventana modifica o elimina una asignación existente. **Asignación masiva** repite un turno para un
+usuario entre dos fechas, permite limitar los días de la semana y ofrece sobrescritura opcional. Por defecto
+conserva las fechas ya asignadas y muestra cuántas fueron omitidas. Usuarios desactivados no aparecen como
 opción y la API los rechaza aunque se envíe una petición directa.
 
 **Si quien sale está en la matriz, el sistema lo advierte** y no deja la baja sin resolver:

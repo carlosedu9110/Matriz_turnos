@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.core.security import create_reset_token
-from app.models import Cargo, Rol, Trabajador, Usuario
+from app.models import Cargo, Rol, Trabajador, Usuario, Vacacion
 from app.services.matriz_service import sembrar_tipos_turno
 
 HOY = date.today()
@@ -151,6 +151,7 @@ ENDPOINTS_ADMIN = [
     ("get", "/reemplazos"), ("get", "/reemplazos/1"), ("post", "/reemplazos"), ("delete", "/reemplazos/1"),
     ("post", "/matriz/ciclos"), ("post", "/matriz/ciclos/1/generar"),
     ("get", "/matriz/asignaciones?desde=2026-01-01&hasta=2026-01-07"),
+    ("post", "/matriz/asignaciones/masivas"),
     ("patch", "/matriz/asignaciones/1"),
     ("put", "/matriz/asignaciones"), ("delete", "/matriz/asignaciones/1"),
     ("post", "/areas"), ("patch", "/areas/1"), ("delete", "/areas/1"),
@@ -336,6 +337,107 @@ def test_admin_asigna_modifica_y_elimina(client, admin_headers, matriz):
     asignacion_id = next(f["id"] for f in fila if f["trabajador"]["id"] == libre)
     assert client.delete(f"/matriz/asignaciones/{asignacion_id}", headers=admin_headers).status_code == 204
     assert client.get(f"/matriz/asignaciones?desde={d}&hasta={d}&trabajador_id={libre}", headers=admin_headers).json() == []
+
+
+def test_asignacion_masiva_crea_repite_omite_y_sobrescribe(client, admin_headers, matriz):
+    libre = matriz["ids"][4]
+    desde = (LUNES + timedelta(days=28)).isoformat()
+    hasta = (LUNES + timedelta(days=34)).isoformat()
+    types = {x["nombre"]: x["id"] for x in client.get(f"/matriz?desde={desde}&hasta={hasta}", headers=admin_headers).json()["tipos_turno"]}
+    assert client.post(
+        f"/trabajadores/{libre}/usuario",
+        json={"email": "masiva@example.com", "cargo": "Analista"},
+        headers=admin_headers,
+    ).status_code == 201
+    body = {
+        "trabajador_id": libre,
+        "tipo_turno_id": types["Mañana"],
+        "desde": desde,
+        "hasta": hasta,
+    }
+
+    r = client.post("/matriz/asignaciones/masivas", json=body, headers=admin_headers)
+    assert r.status_code == 200 and r.json() == {"creadas": 7, "actualizadas": 0, "omitidas": 0}
+    repeat = client.post("/matriz/asignaciones/masivas", json=body, headers=admin_headers)
+    assert repeat.status_code == 200 and repeat.json() == {"creadas": 0, "actualizadas": 0, "omitidas": 7}
+    body["tipo_turno_id"] = types["Noche"]
+    overwrite = client.post(
+        "/matriz/asignaciones/masivas",
+        json={**body, "sobrescribir": True, "dias_semana": [0, 2, 4]},
+        headers=admin_headers,
+    )
+    assert overwrite.status_code == 200
+    assert overwrite.json() == {"creadas": 0, "actualizadas": 3, "omitidas": 0}
+    filas = client.get(
+        f"/matriz/asignaciones?desde={desde}&hasta={hasta}&trabajador_id={libre}",
+        headers=admin_headers,
+    ).json()
+    assert len(filas) == 7
+    assert sum(x["tipo_turno_id"] == types["Noche"] for x in filas) == 3
+    assert all(x["manual"] for x in filas)
+
+
+def test_asignacion_masiva_valida_rango_dias_y_permisos(client, admin_headers, final, matriz):
+    types = client.get(
+        f"/matriz?desde={LUNES.isoformat()}&hasta={(LUNES + timedelta(days=6)).isoformat()}",
+        headers=admin_headers,
+    ).json()["tipos_turno"]
+    body = {
+        "trabajador_id": matriz["ids"][4],
+        "tipo_turno_id": types[0]["id"],
+        "desde": LUNES.isoformat(),
+        "hasta": (LUNES + timedelta(days=7)).isoformat(),
+    }
+    assert client.post("/matriz/asignaciones/masivas", json=body, headers=final["h"]).status_code == 403
+    assert client.post("/matriz/asignaciones/masivas", json={**body, "hasta": (LUNES - timedelta(days=1)).isoformat()}, headers=admin_headers).status_code == 422
+    assert client.post("/matriz/asignaciones/masivas", json={**body, "dias_semana": []}, headers=admin_headers).status_code == 422
+    assert client.post("/matriz/asignaciones/masivas", json={**body, "dias_semana": [0, 7]}, headers=admin_headers).status_code == 422
+
+
+def test_asignacion_masiva_omite_vacaciones_aprobadas(client, admin_headers, matriz, cargos, db_session):
+    libre = matriz["ids"][4]
+    assert client.post(
+        f"/trabajadores/{libre}/usuario",
+        json={"email": "vacaciones-masivas@example.com", "cargo": "Analista"},
+        headers=admin_headers,
+    ).status_code == 201
+    desde = LUNES + timedelta(days=40)
+    db_session.add(Vacacion(
+        trabajador_id=libre,
+        fecha_inicio=desde + timedelta(days=2),
+        fecha_fin=desde + timedelta(days=2),
+        estado="aprobada",
+    ))
+    db_session.commit()
+    tipos = {
+        t["nombre"]: t["id"]
+        for t in client.get(
+            f"/matriz?desde={desde.isoformat()}&hasta={(desde + timedelta(days=6)).isoformat()}",
+            headers=admin_headers,
+        ).json()["tipos_turno"]
+    }
+
+    r = client.post(
+        "/matriz/asignaciones/masivas",
+        json={
+            "trabajador_id": libre,
+            "tipo_turno_id": tipos["Mañana"],
+            "desde": desde.isoformat(),
+            "hasta": (desde + timedelta(days=6)).isoformat(),
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 200 and r.json() == {"creadas": 6, "actualizadas": 0, "omitidas": 1}
+    puntual = client.put(
+        "/matriz/asignaciones",
+        json={
+            "trabajador_id": libre,
+            "tipo_turno_id": tipos["Mañana"],
+            "fecha": (desde + timedelta(days=2)).isoformat(),
+        },
+        headers=admin_headers,
+    )
+    assert puntual.status_code == 409
 
 
 def test_no_se_asigna_a_usuarios_desactivados(client, admin_headers, matriz, definir_password, db_session):

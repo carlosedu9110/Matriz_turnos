@@ -3,7 +3,7 @@
 Admin: ve y gestiona todo (ciclos, asignaciones, reemplazos).
 Usuario final: solo consulta SUS turnos (el filtro se aplica en el servidor, no en la interfaz).
 """
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
@@ -12,6 +12,8 @@ from app.core.dependencies import es_admin, get_current_active_user, require_adm
 from app.db.session import get_db
 from app.models import Asignacion, CicloTurno, TipoTurno, Trabajador, Usuario
 from app.schemas.matriz import (
+    AsignacionMasivaIn,
+    AsignacionMasivaOut,
     AsignacionManualIn,
     AsignacionOut,
     AsignacionUpdate,
@@ -23,6 +25,7 @@ from app.schemas.matriz import (
 )
 from app.services.common import commit_or_409, get_or_404
 from app.services.matriz_service import construir_matriz, crear_ciclo, generar_asignaciones
+from app.services.vacacion_service import fechas_aprobadas
 
 router = APIRouter(prefix="/matriz", tags=["matriz"])
 admin = Depends(require_admin)
@@ -104,6 +107,53 @@ def listar_asignaciones(
     return q.order_by(Asignacion.fecha, Asignacion.tipo_turno_id).all()
 
 
+@router.post("/asignaciones/masivas", response_model=AsignacionMasivaOut, dependencies=[admin])
+def asignar_rango(datos: AsignacionMasivaIn, db: Session = Depends(get_db)):
+    """Asigna a la misma persona y turno en un rango; por defecto omite fechas ya asignadas."""
+    trabajador = get_or_404(db, Trabajador, datos.trabajador_id, "Trabajador")
+    if not trabajador.activo or trabajador.usuario is None or not trabajador.usuario.activo:
+        raise HTTPException(422, "Solo se pueden asignar usuarios activos")
+    tipo = get_or_404(db, TipoTurno, datos.tipo_turno_id, "Tipo de turno")
+
+    asignaciones = (
+        db.query(Asignacion)
+        .filter(
+            Asignacion.trabajador_id == trabajador.id,
+            Asignacion.fecha.between(datos.desde, datos.hasta),
+        )
+        .all()
+    )
+    existentes = {a.fecha: a for a in asignaciones}
+    vacaciones = fechas_aprobadas(db, trabajador.id, datos.desde, datos.hasta)
+    dias = set(datos.dias_semana)
+    creadas = actualizadas = omitidas = 0
+    fecha = datos.desde
+    while fecha <= datos.hasta:
+        if fecha.weekday() in dias:
+            actual = existentes.get(fecha)
+            if fecha in vacaciones:
+                omitidas += 1
+            elif actual is None:
+                nueva = Asignacion(
+                    trabajador_id=trabajador.id,
+                    fecha=fecha,
+                    tipo_turno_id=tipo.id,
+                    manual=True,
+                )
+                db.add(nueva)
+                existentes[fecha] = nueva
+                creadas += 1
+            elif datos.sobrescribir:
+                actual.tipo_turno_id = tipo.id
+                actual.manual = True
+                actualizadas += 1
+            else:
+                omitidas += 1
+        fecha += timedelta(days=1)
+    commit_or_409(db, "Una o más fechas ya tienen asignaciones incompatibles")
+    return AsignacionMasivaOut(creadas=creadas, actualizadas=actualizadas, omitidas=omitidas)
+
+
 @router.put("/asignaciones", status_code=204, dependencies=[admin])
 def asignar_manual(datos: AsignacionManualIn, db: Session = Depends(get_db)):
     """Crea o cambia manualmente el turno de una persona en una fecha. No admite personas desactivadas."""
@@ -112,6 +162,8 @@ def asignar_manual(datos: AsignacionManualIn, db: Session = Depends(get_db)):
         raise HTTPException(422, "No se puede asignar a un usuario desactivado")
     if trabajador.usuario is None:
         raise HTTPException(422, "Primero crea una cuenta de usuario para esta persona")
+    if datos.fecha in fechas_aprobadas(db, trabajador.id, datos.fecha, datos.fecha):
+        raise HTTPException(409, "El usuario tiene vacaciones aprobadas en esa fecha")
     get_or_404(db, TipoTurno, datos.tipo_turno_id, "Tipo de turno")
     a = (
         db.query(Asignacion)
@@ -138,10 +190,13 @@ def modificar_asignacion(asignacion_id: int, datos: AsignacionUpdate, db: Sessio
         if trabajador.usuario is None:
             raise HTTPException(422, "Primero crea una cuenta de usuario para esta persona")
         asignacion.trabajador_id = trabajador.id
+    trabajador_objetivo = get_or_404(db, Trabajador, asignacion.trabajador_id, "Trabajador")
     if "tipo_turno_id" in cambios:
         asignacion.tipo_turno_id = get_or_404(db, TipoTurno, cambios["tipo_turno_id"], "Tipo de turno").id
     if "fecha" in cambios:
         asignacion.fecha = cambios["fecha"]
+    if asignacion.fecha in fechas_aprobadas(db, trabajador_objetivo.id, asignacion.fecha, asignacion.fecha):
+        raise HTTPException(409, "El usuario tiene vacaciones aprobadas en esa fecha")
     asignacion.manual = True
     commit_or_409(db, "La persona ya tiene una asignación en esa fecha")
     db.refresh(asignacion)

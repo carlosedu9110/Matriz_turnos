@@ -20,6 +20,8 @@
 - Solo Admin puede aprobar o rechazar solicitudes pendientes.
 - Un reemplazante tiene que ser otra persona activa. Si ya tiene turno asignado en un día que tendría
   que cubrir, la aprobación se rechaza para que el Admin resuelva el conflicto.
+- Las fechas aprobadas no reciben nuevas asignaciones manuales, masivas ni generadas por el ciclo.
+  La operación masiva omite esos días e incluye las omisiones en el resumen.
 - Rechazar requiere una nota. Una solicitud decidida no puede volver a decidirse ni cancelarse.
 - Rechazo o cancelación no modifican las asignaciones. Aprobación sin reemplazante deja una alerta
   visual en la fila de vacaciones.

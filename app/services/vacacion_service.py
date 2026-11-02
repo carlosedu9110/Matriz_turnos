@@ -12,6 +12,24 @@ from app.services.common import commit_or_409, get_or_404
 ESTADOS_OCUPANTES = ("pendiente", "aprobada")
 
 
+def fechas_aprobadas(db: Session, trabajador_id: int, desde: date, hasta: date) -> set[date]:
+    """Fechas aprobadas que deben mantenerse libres de nuevas asignaciones laborales."""
+    solicitudes = db.query(Vacacion).filter(
+        Vacacion.trabajador_id == trabajador_id,
+        Vacacion.estado == "aprobada",
+        Vacacion.fecha_inicio <= hasta,
+        Vacacion.fecha_fin >= desde,
+    ).all()
+    dias: set[date] = set()
+    for solicitud in solicitudes:
+        inicio = max(desde, solicitud.fecha_inicio)
+        fin = min(hasta, solicitud.fecha_fin)
+        while inicio <= fin:
+            dias.add(inicio)
+            inicio = date.fromordinal(inicio.toordinal() + 1)
+    return dias
+
+
 def _hay_solape(db: Session, trabajador_id: int, desde: date, hasta: date, excluir_id: int | None = None) -> bool:
     q = db.query(Vacacion.id).filter(
         Vacacion.trabajador_id == trabajador_id,
