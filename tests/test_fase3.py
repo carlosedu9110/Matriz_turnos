@@ -135,3 +135,18 @@ def test_plantilla_exacta_segun_matriz_real():
         3: {0: M, 1: M, 2: T, 4: N, 5: N, 6: N},
         4: {0: N, 1: N, 2: N, 3: N, 6: T},
     }
+
+
+def test_no_genera_rotacion_de_ciclo_inactivo(client, admin_headers, ocho, db_session):
+    ciclo_id = _ciclo(client, admin_headers, ocho).json()["id"]
+    from app.models import CicloTurno
+
+    ciclo = db_session.get(CicloTurno, ciclo_id)
+    ciclo.activo = False
+    db_session.commit()
+    r = client.post(
+        f"/matriz/ciclos/{ciclo_id}/generar",
+        json={"desde": LUNES.isoformat(), "hasta": (LUNES + timedelta(days=6)).isoformat()},
+        headers=admin_headers,
+    )
+    assert r.status_code == 409

@@ -102,10 +102,17 @@ desactivar y reactivar. El Admin nunca crea ni ve contraseñas; el usuario las d
 También se pueden vincular trabajadores existentes sin duplicar su ficha.
 
 Botón **Asignar turnos** (solo Admin): al seleccionar una celda se puede elegir usuario activo, turno y fecha;
-la misma ventana modifica o elimina una asignación existente. **Asignación masiva** repite un turno para un
-usuario entre dos fechas, permite limitar los días de la semana y ofrece sobrescritura opcional. Por defecto
-conserva las fechas ya asignadas y muestra cuántas fueron omitidas. Usuarios desactivados no aparecen como
-opción y la API los rechaza aunque se envíe una petición directa.
+la misma ventana modifica o elimina una asignación existente.
+
+**Asignación masiva** aplica por defecto la rotación completa de cuatro semanas de la matriz elegida a todos
+sus titulares entre las fechas Desde/Hasta. El cálculo usa la fase de cada titular, la semana ancla y el día
+de la semana; los días de descanso quedan vacíos. Opcionalmente se puede cambiar el modo a **turno fijo**
+para una persona y seleccionar días concretos.
+
+Por defecto, las asignaciones existentes se conservan; con la opción de sobrescritura, solo se reemplazan
+las asignaciones generadas, nunca las manuales. Las vacaciones aprobadas se respetan y cuentan como omitidas.
+El resumen muestra creadas, modificadas y omitidas. Usuarios inactivos no participan ni aparecen como
+opción y la API aplica las validaciones aunque se envíe una petición directa.
 
 **Si quien sale está en la matriz, el sistema lo advierte** y no deja la baja sin resolver:
 

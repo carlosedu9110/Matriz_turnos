@@ -952,53 +952,89 @@ async function openAsignacion(celda = null, sugerido = {}) {
 }
 
 async function openAsignacionMasiva() {
+  const matrices = state.matrices || [];
+  if (!matrices.length) return toast("Crea primero una matriz con su rotación de 4 semanas", true);
   let usuarios;
   try { usuarios = await Api.get("/usuarios?activo=true"); }
   catch (e) { return toast(e.message, true); }
-  if (!usuarios.length) return toast("Crea un usuario activo antes de asignarle turnos", true);
+  const ciclos = el("select", {}, ...matrices.map((m) =>
+    el("option", { value: m.id }, `${m.nombre} · ${m.codigo}`)));
+  const desde = el("input", { type: "date", required: "", value: iso(range()[0]) });
+  const hasta = el("input", { type: "date", required: "", value: iso(range()[1]) });
+  const modo = el("select", {},
+    el("option", { value: "rotacion" }, "Rotación del ciclo (4 semanas)"),
+    el("option", { value: "fijo" }, "Un turno fijo para una persona"));
+  const sobrescribir = el("input", { type: "checkbox" });
+
   const trabajador = el("select", {}, ...usuarios.map((u) =>
     el("option", { value: u.trabajador_id }, `${u.nombres} ${u.apellidos} · ${u.cargo || "sin cargo"}`)));
   const turnos = state.data?.tipos_turno || [];
-  if (!turnos.length) return toast("No hay tipos de turno activos", true);
   const tipo = el("select", {}, ...turnos.map((t) =>
     el("option", { value: t.id }, `${t.nombre} · ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`)));
-  const desde = el("input", { type: "date", required: "", value: iso(range()[0]) });
-  const hasta = el("input", { type: "date", required: "", value: iso(range()[1]) });
+  const fija = el("div", { class: "hidden", style: "display:grid;gap:.7rem" },
+    el("label", {}, "Usuario activo", trabajador),
+    el("label", {}, "Turno fijo", tipo),
+  );
+  const rotacionInfo = el("p", { class: "muted" },
+    "Aplica a los titulares de la matriz sus fases y turnos del ciclo. Se respetan los descansos, " +
+    "las vacaciones aprobadas y las asignaciones manuales.");
+  modo.addEventListener("change", () => {
+    const esRotacion = modo.value === "rotacion";
+    ciclos.classList.toggle("hidden", !esRotacion);
+    rotacionInfo.classList.toggle("hidden", !esRotacion);
+    fija.classList.toggle("hidden", esRotacion);
+  diasFijos.classList.toggle("hidden", esRotacion);
+  etiquetaSobrescribir.lastChild.textContent = esRotacion
+    ? "Sobrescribir turnos generados anteriores (nunca cambia los manuales)"
+    : "Sobrescribir asignaciones existentes del usuario";
+  });
   const semana = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
   const checks = semana.map((dia, i) => {
     const input = el("input", { type: "checkbox", checked: "", value: i });
     return el("label", { class: "weekday-check" }, input, dia);
   });
-  const sobrescribir = el("input", { type: "checkbox" });
+  const diasFijos = el("fieldset", { class: "weekday-fieldset hidden" },
+    el("legend", {}, "Días de la semana"),
+    el("div", { class: "weekday-list" }, checks));
+  const etiquetaSobrescribir = el("label", { class: "checkbox-row" }, sobrescribir, "Sobrescribir turnos generados anteriores");
   openDialog(
-    el("h2", {}, "Asignación masiva"),
-    el("p", { class: "muted" }, "Asigna el mismo turno a una persona entre las fechas elegidas. Puedes limitarlo a ciertos días."),
-    el("label", {}, "Usuario activo", trabajador),
-    el("label", {}, "Turno", tipo),
+    el("h2", {}, "Asignación masiva por rotación"),
+    el("p", { class: "muted" }, "La opción recomendada aplica el ciclo de cuatro semanas y rota cada titular por su fase."),
+    el("label", {}, "Tipo de asignación", modo),
+    el("label", {}, "Matriz / rotación", ciclos),
+    rotacionInfo,
+    fija,
     el("div", { class: "form-grid" }, el("label", {}, "Desde", desde), el("label", {}, "Hasta", hasta)),
-    el("fieldset", { class: "weekday-fieldset" },
-      el("legend", {}, "Días de la semana"),
-      el("div", { class: "weekday-list" }, checks)),
-    el("label", { class: "checkbox-row" }, sobrescribir, "Sobrescribir asignaciones existentes del usuario"),
-    el("p", { class: "muted" }, "Si no marcas sobrescribir, las fechas que ya tienen un turno se conservan y se cuentan como omitidas."),
+    diasFijos,
+    etiquetaSobrescribir,
+    el("p", { class: "muted" }, "Por defecto se conservan las asignaciones existentes; los turnos manuales nunca se sobrescriben."),
     el("div", { class: "actions" }, cancelBtn(),
       el("button", { class: "btn primary", type: "button", onclick: async () => {
-        const dias_semana = checks
-          .filter((c) => c.querySelector("input").checked)
-          .map((c) => Number(c.querySelector("input").value));
         if (!desde.value || !hasta.value || hasta.value < desde.value) {
           return toast("Revisa las fechas: el fin debe ser igual o posterior al inicio", true);
         }
-        if (!dias_semana.length) return toast("Selecciona al menos un día de la semana", true);
         try {
-          const resultado = await Api.post("/matriz/asignaciones/masivas", {
-            trabajador_id: Number(trabajador.value),
-            tipo_turno_id: Number(tipo.value),
-            desde: desde.value,
-            hasta: hasta.value,
-            dias_semana,
-            sobrescribir: sobrescribir.checked,
-          });
+          let resultado;
+          if (modo.value === "rotacion") {
+            resultado = await Api.post(`/matriz/ciclos/${ciclos.value}/generar`, {
+              desde: desde.value,
+              hasta: hasta.value,
+              sobrescribir: sobrescribir.checked,
+            });
+          } else {
+            const dias_semana = checks.filter((c) => c.querySelector("input").checked)
+              .map((c) => Number(c.querySelector("input").value));
+            if (!usuarios.length) return toast("Crea un usuario activo antes de asignarle turnos", true);
+            if (!dias_semana.length) return toast("Selecciona al menos un día de la semana", true);
+            resultado = await Api.post("/matriz/asignaciones/masivas", {
+              trabajador_id: Number(trabajador.value),
+              tipo_turno_id: Number(tipo.value),
+              desde: desde.value,
+              hasta: hasta.value,
+              dias_semana,
+              sobrescribir: sobrescribir.checked,
+            });
+          }
           closeDialog();
           toast(`Asignación masiva: ${resultado.creadas} nuevas, ${resultado.actualizadas} modificadas, ${resultado.omitidas} omitidas`);
           load();

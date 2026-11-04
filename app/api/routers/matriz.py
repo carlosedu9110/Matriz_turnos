@@ -54,7 +54,10 @@ def listar(db: Session = Depends(get_db), actor: Usuario = Depends(get_current_a
 @router.post("/ciclos/{ciclo_id}/generar", response_model=GenerarOut, dependencies=[admin])
 def generar(ciclo_id: int, datos: GenerarIn, db: Session = Depends(get_db)):
     """Genera las asignaciones del rango. No toca las manuales ni asigna a personas desactivadas."""
-    return generar_asignaciones(db, get_or_404(db, CicloTurno, ciclo_id, "Ciclo"), datos)
+    ciclo = get_or_404(db, CicloTurno, ciclo_id, "Matriz")
+    if not ciclo.activo:
+        raise HTTPException(409, "No se puede generar la rotación de una matriz inactiva")
+    return generar_asignaciones(db, ciclo, datos)
 
 
 @router.get("", response_model=MatrizOut)
