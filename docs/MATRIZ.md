@@ -87,13 +87,12 @@ Solicitud masiva (`POST /matriz/asignaciones/masivas`):
   "tipo_turno_id": 1,
   "desde": "2026-11-02",
   "hasta": "2026-11-30",
-  "dias_semana": [0, 1, 2, 3, 4],
-  "sobrescribir": false
+  "dias_semana": [0, 1, 2, 3, 4]
 }
 ```
 
 `dias_semana` usa 0=lunes … 6=domingo; si se omite, se incluyen todos los días. La respuesta informa
-`creadas`, `actualizadas` y `omitidas`. Las fechas con vacaciones aprobadas nunca reciben una nueva asignación.
+`creadas`, `actualizadas` (siempre 0) y `omitidas`. Las fechas con vacaciones aprobadas nunca reciben una nueva asignación.
 
 ## Altas y bajas de personal
 
@@ -109,10 +108,12 @@ sus titulares entre las fechas Desde/Hasta. El cálculo usa la fase de cada titu
 de la semana; los días de descanso quedan vacíos. Opcionalmente se puede cambiar el modo a **turno fijo**
 para una persona y seleccionar días concretos.
 
-Por defecto, las asignaciones existentes se conservan; con la opción de sobrescritura, solo se reemplazan
-las asignaciones generadas, nunca las manuales. Las vacaciones aprobadas se respetan y cuentan como omitidas.
-El resumen muestra creadas, modificadas y omitidas. Usuarios inactivos no participan ni aparecen como
-opción y la API aplica las validaciones aunque se envíe una petición directa.
+Las asignaciones existentes **nunca se sobrescriben** en operaciones masivas o generación cíclica, ni
+siquiera las generadas automáticamente. Si una persona ya tiene un turno en una fecha, esa asignación
+se conserva y la fecha se cuenta como omitida. Las vacaciones aprobadas también se omiten.
+El resumen muestra creadas, modificadas (siempre 0) y omitidas. Usuarios inactivos no participan ni
+aparecen como opción y la API rechaza peticiones que intenten solicitar sobrescritura.
+Para cambiar un turno existente, el Admin debe editar explícitamente esa asignación desde la matriz.
 
 **Si quien sale está en la matriz, el sistema lo advierte** y no deja la baja sin resolver:
 

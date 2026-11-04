@@ -72,9 +72,10 @@ class CicloOut(BaseModel):
 
 
 class GenerarIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     desde: date
     hasta: date
-    sobrescribir: bool = False
 
     @model_validator(mode="after")
     def _validar(self):
@@ -114,12 +115,13 @@ class AsignacionUpdate(BaseModel):
 
 
 class AsignacionMasivaIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     trabajador_id: int
     tipo_turno_id: int
     desde: date
     hasta: date
     dias_semana: list[int] = Field(default_factory=lambda: list(range(7)))
-    sobrescribir: bool = False
 
     @model_validator(mode="after")
     def _validar(self):

@@ -334,17 +334,15 @@ function openGenerar() {
   const lunes = mondayOf(new Date());
   const desde = el("input", { type: "date", value: iso(lunes) });
   const hasta = el("input", { type: "date", value: iso(addDays(lunes, 12 * 7 - 1)) });
-  const sobre = el("input", { type: "checkbox" });
   openDialog(
     el("h2", {}, `Generar turnos · ${ciclo.nombre}`),
-    el("p", { class: "muted" }, "Aplica el ciclo rotativo de 4 semanas. No modifica asignaciones manuales (✎)."),
+    el("p", { class: "muted" }, "Aplica el ciclo rotativo de 4 semanas solo en fechas sin asignación. Nunca reemplaza turnos existentes ni manuales."),
     el("label", {}, "Desde", desde), el("label", {}, "Hasta", hasta),
-    el("label", { style: "display:flex;gap:.5rem;align-items:center" }, sobre, "Sobrescribir turnos ya generados"),
     el("div", { class: "actions" }, cancelBtn(),
       el("button", { class: "btn primary", type: "button", onclick: async () => {
         try {
-          const r = await Api.post(`/matriz/ciclos/${ciclo.id}/generar`, { desde: desde.value, hasta: hasta.value, sobrescribir: sobre.checked });
-          closeDialog(); toast(`Turnos generados: ${r.creadas} nuevos, ${r.actualizadas} actualizados`); load();
+          const r = await Api.post(`/matriz/ciclos/${ciclo.id}/generar`, { desde: desde.value, hasta: hasta.value });
+          closeDialog(); toast(`Turnos generados: ${r.creadas} nuevos, ${r.omitidas} fechas existentes/vacaciones conservadas`); load();
         } catch (e) { toast(e.message, true); }
       } }, "Generar")),
   );
@@ -964,7 +962,6 @@ async function openAsignacionMasiva() {
   const modo = el("select", {},
     el("option", { value: "rotacion" }, "Rotación del ciclo (4 semanas)"),
     el("option", { value: "fijo" }, "Un turno fijo para una persona"));
-  const sobrescribir = el("input", { type: "checkbox" });
 
   const trabajador = el("select", {}, ...usuarios.map((u) =>
     el("option", { value: u.trabajador_id }, `${u.nombres} ${u.apellidos} · ${u.cargo || "sin cargo"}`)));
@@ -979,14 +976,11 @@ async function openAsignacionMasiva() {
     "Aplica a los titulares de la matriz sus fases y turnos del ciclo. Se respetan los descansos, " +
     "las vacaciones aprobadas y las asignaciones manuales.");
   modo.addEventListener("change", () => {
-    const esRotacion = modo.value === "rotacion";
-    ciclos.classList.toggle("hidden", !esRotacion);
-    rotacionInfo.classList.toggle("hidden", !esRotacion);
-    fija.classList.toggle("hidden", esRotacion);
+  const esRotacion = modo.value === "rotacion";
+  ciclos.classList.toggle("hidden", !esRotacion);
+  rotacionInfo.classList.toggle("hidden", !esRotacion);
+  fija.classList.toggle("hidden", esRotacion);
   diasFijos.classList.toggle("hidden", esRotacion);
-  etiquetaSobrescribir.lastChild.textContent = esRotacion
-    ? "Sobrescribir turnos generados anteriores (nunca cambia los manuales)"
-    : "Sobrescribir asignaciones existentes del usuario";
   });
   const semana = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
   const checks = semana.map((dia, i) => {
@@ -996,7 +990,6 @@ async function openAsignacionMasiva() {
   const diasFijos = el("fieldset", { class: "weekday-fieldset hidden" },
     el("legend", {}, "Días de la semana"),
     el("div", { class: "weekday-list" }, checks));
-  const etiquetaSobrescribir = el("label", { class: "checkbox-row" }, sobrescribir, "Sobrescribir turnos generados anteriores");
   openDialog(
     el("h2", {}, "Asignación masiva por rotación"),
     el("p", { class: "muted" }, "La opción recomendada aplica el ciclo de cuatro semanas y rota cada titular por su fase."),
@@ -1006,8 +999,7 @@ async function openAsignacionMasiva() {
     fija,
     el("div", { class: "form-grid" }, el("label", {}, "Desde", desde), el("label", {}, "Hasta", hasta)),
     diasFijos,
-    etiquetaSobrescribir,
-    el("p", { class: "muted" }, "Por defecto se conservan las asignaciones existentes; los turnos manuales nunca se sobrescriben."),
+    el("p", { class: "warn" }, "La asignación masiva solo llena fechas vacías. Nunca sobrescribe ni cambia usuarios ya asignados."),
     el("div", { class: "actions" }, cancelBtn(),
       el("button", { class: "btn primary", type: "button", onclick: async () => {
         if (!desde.value || !hasta.value || hasta.value < desde.value) {
@@ -1019,7 +1011,6 @@ async function openAsignacionMasiva() {
             resultado = await Api.post(`/matriz/ciclos/${ciclos.value}/generar`, {
               desde: desde.value,
               hasta: hasta.value,
-              sobrescribir: sobrescribir.checked,
             });
           } else {
             const dias_semana = checks.filter((c) => c.querySelector("input").checked)
@@ -1032,7 +1023,6 @@ async function openAsignacionMasiva() {
               desde: desde.value,
               hasta: hasta.value,
               dias_semana,
-              sobrescribir: sobrescribir.checked,
             });
           }
           closeDialog();

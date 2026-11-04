@@ -339,7 +339,7 @@ def test_admin_asigna_modifica_y_elimina(client, admin_headers, matriz):
     assert client.get(f"/matriz/asignaciones?desde={d}&hasta={d}&trabajador_id={libre}", headers=admin_headers).json() == []
 
 
-def test_asignacion_masiva_crea_repite_omite_y_sobrescribe(client, admin_headers, matriz):
+def test_asignacion_masiva_crea_y_repetir_solo_omite_existentes(client, admin_headers, matriz):
     libre = matriz["ids"][4]
     desde = (LUNES + timedelta(days=28)).isoformat()
     hasta = (LUNES + timedelta(days=34)).isoformat()
@@ -360,20 +360,18 @@ def test_asignacion_masiva_crea_repite_omite_y_sobrescribe(client, admin_headers
     assert r.status_code == 200 and r.json() == {"creadas": 7, "actualizadas": 0, "omitidas": 0}
     repeat = client.post("/matriz/asignaciones/masivas", json=body, headers=admin_headers)
     assert repeat.status_code == 200 and repeat.json() == {"creadas": 0, "actualizadas": 0, "omitidas": 7}
-    body["tipo_turno_id"] = types["Noche"]
-    overwrite = client.post(
+    intento_sobrescribir = client.post(
         "/matriz/asignaciones/masivas",
         json={**body, "sobrescribir": True, "dias_semana": [0, 2, 4]},
         headers=admin_headers,
     )
-    assert overwrite.status_code == 200
-    assert overwrite.json() == {"creadas": 0, "actualizadas": 3, "omitidas": 0}
+    assert intento_sobrescribir.status_code == 422
     filas = client.get(
         f"/matriz/asignaciones?desde={desde}&hasta={hasta}&trabajador_id={libre}",
         headers=admin_headers,
     ).json()
     assert len(filas) == 7
-    assert sum(x["tipo_turno_id"] == types["Noche"] for x in filas) == 3
+    assert sum(x["tipo_turno_id"] == types["Mañana"] for x in filas) == 7
     assert all(x["manual"] for x in filas)
 
 

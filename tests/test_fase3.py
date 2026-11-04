@@ -110,10 +110,15 @@ def test_asignacion_manual_no_se_sobrescribe(client, admin_headers, ocho, db_ses
     noche = next(t["id"] for t in tipos if t["nombre"] == "Noche")
     r = client.put("/matriz/asignaciones", json={"trabajador_id": ocho[0], "fecha": d.isoformat(), "tipo_turno_id": noche}, headers=admin_headers)
     assert r.status_code == 204
-    client.post(f"/matriz/ciclos/{cid}/generar", json={**rango, "sobrescribir": True}, headers=admin_headers)
+    regen = client.post(f"/matriz/ciclos/{cid}/generar", json=rango, headers=admin_headers)
+    assert regen.status_code == 200 and regen.json()["actualizadas"] == 0 and regen.json()["omitidas"] == 3
     celdas = client.get(f"/matriz?desde={d}&hasta={d}", headers=admin_headers).json()["celdas"]
     mia = next(c for c in celdas if c["trabajador"]["id"] == ocho[0])
     assert mia["tipo_turno_id"] == noche and mia["manual"] is True
+    intento_forzar = client.post(
+        f"/matriz/ciclos/{cid}/generar", json={**rango, "sobrescribir": True}, headers=admin_headers
+    )
+    assert intento_forzar.status_code == 422
 
 
 def test_permisos_matriz(client, admin_headers, ocho):

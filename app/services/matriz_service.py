@@ -104,7 +104,7 @@ def generar_asignaciones(db: Session, ciclo: CicloTurno, datos: GenerarIn) -> Ge
         (a.trabajador_id, a.fecha): a
         for a in db.query(Asignacion).filter(Asignacion.fecha.between(datos.desde, datos.hasta))
     }
-    creadas = actualizadas = omitidas = 0
+    creadas = omitidas = 0
     dia = datos.desde
     while dia <= datos.hasta:
         for part in ciclo.participantes:
@@ -122,14 +122,11 @@ def generar_asignaciones(db: Session, ciclo: CicloTurno, datos: GenerarIn) -> Ge
                     Asignacion(trabajador_id=part.trabajador_id, fecha=dia, tipo_turno_id=turno_id, ciclo_id=ciclo.id)
                 )
                 creadas += 1
-            elif datos.sobrescribir and not actual.manual:
-                actual.tipo_turno_id, actual.ciclo_id = turno_id, ciclo.id
-                actualizadas += 1
             else:
                 omitidas += 1
         dia += timedelta(days=1)
     commit_or_409(db)
-    return GenerarOut(creadas=creadas, actualizadas=actualizadas, omitidas=omitidas)
+    return GenerarOut(creadas=creadas, actualizadas=0, omitidas=omitidas)
 
 
 def construir_matriz(db: Session, desde: date, hasta: date, ciclo: CicloTurno | None) -> MatrizOut:

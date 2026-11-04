@@ -129,7 +129,7 @@ def asignar_rango(datos: AsignacionMasivaIn, db: Session = Depends(get_db)):
     existentes = {a.fecha: a for a in asignaciones}
     vacaciones = fechas_aprobadas(db, trabajador.id, datos.desde, datos.hasta)
     dias = set(datos.dias_semana)
-    creadas = actualizadas = omitidas = 0
+    creadas = omitidas = 0
     fecha = datos.desde
     while fecha <= datos.hasta:
         if fecha.weekday() in dias:
@@ -146,15 +146,11 @@ def asignar_rango(datos: AsignacionMasivaIn, db: Session = Depends(get_db)):
                 db.add(nueva)
                 existentes[fecha] = nueva
                 creadas += 1
-            elif datos.sobrescribir:
-                actual.tipo_turno_id = tipo.id
-                actual.manual = True
-                actualizadas += 1
             else:
                 omitidas += 1
         fecha += timedelta(days=1)
     commit_or_409(db, "Una o más fechas ya tienen asignaciones incompatibles")
-    return AsignacionMasivaOut(creadas=creadas, actualizadas=actualizadas, omitidas=omitidas)
+    return AsignacionMasivaOut(creadas=creadas, actualizadas=0, omitidas=omitidas)
 
 
 @router.put("/asignaciones", status_code=204, dependencies=[admin])
