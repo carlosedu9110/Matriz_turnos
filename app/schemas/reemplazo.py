@@ -24,6 +24,15 @@ class ReemplazoCreate(BaseModel):
         return self
 
 
+class ReemplazoUpdate(BaseModel):
+    trabajador_ausente_id: int | None = None
+    trabajador_reemplazo_id: int | None = None
+    tipo_turno_id: int | None = None
+    fecha_inicio: date | None = None
+    fecha_fin: date | None = None
+    motivo: str | None = Field(None, max_length=255)
+
+
 class ReemplazoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -32,6 +41,7 @@ class ReemplazoOut(BaseModel):
     fecha_fin: date
     motivo: str | None = None
     activo: bool
+    ligado_vacaciones: bool = False
     trabajador_ausente: TrabajadorOut
     trabajador_reemplazo: TrabajadorOut
     tipo_turno: TipoTurnoOut | None = None

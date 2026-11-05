@@ -36,4 +36,4 @@ class Vacacion(Base):
     )
 
     trabajador: Mapped["Trabajador"] = relationship()
-    reemplazo: Mapped["Reemplazo | None"] = relationship()
+    reemplazo: Mapped["Reemplazo | None"] = relationship(back_populates="vacacion")

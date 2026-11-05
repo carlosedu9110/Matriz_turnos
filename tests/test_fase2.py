@@ -124,3 +124,87 @@ def test_reemplazos(client, admin_headers):
     assert client.delete(f"/reemplazos/{rid}", headers=admin_headers).status_code == 204
     assert client.get("/reemplazos", headers=admin_headers).json() == []
     assert client.post("/reemplazos", json=base, headers=admin_headers).status_code == 201
+
+
+def test_editar_anular_y_reactivar_reemplazo(client, admin_headers):
+    a = _trab(client, admin_headers, "REPL-A").json()["id"]
+    b = _trab(client, admin_headers, "REPL-B").json()["id"]
+    c = _trab(client, admin_headers, "REPL-C").json()["id"]
+    body = {
+        "trabajador_ausente_id": a,
+        "trabajador_reemplazo_id": b,
+        "fecha_inicio": "2027-03-01",
+        "fecha_fin": "2027-03-03",
+        "motivo": "Permiso",
+    }
+    creado = client.post("/reemplazos", json=body, headers=admin_headers)
+    assert creado.status_code == 201
+    rid = creado.json()["id"]
+
+    editado = client.patch(
+        f"/reemplazos/{rid}",
+        json={"trabajador_reemplazo_id": c, "fecha_fin": "2027-03-04", "motivo": "Incapacidad"},
+        headers=admin_headers,
+    )
+    assert editado.status_code == 200
+    assert editado.json()["trabajador_reemplazo"]["id"] == c
+    assert editado.json()["fecha_fin"] == "2027-03-04"
+
+    assert client.delete(f"/reemplazos/{rid}", headers=admin_headers).status_code == 204
+    assert client.get("/reemplazos", headers=admin_headers).json() == []
+    historial = client.get("/reemplazos?activo=false", headers=admin_headers).json()
+    assert len(historial) == 1 and historial[0]["id"] == rid and historial[0]["activo"] is False
+    assert client.post(f"/reemplazos/{rid}/reactivar", headers=admin_headers).status_code == 200
+    assert len(client.get("/reemplazos", headers=admin_headers).json()) == 1
+
+
+def test_reemplazo_no_se_crea_si_reemplazante_tiene_turnos(client, admin_headers, db_session):
+    ausente = _trab(client, admin_headers, "CONFLICTO-A").json()["id"]
+    reemplazante = _trab(client, admin_headers, "CONFLICTO-B").json()["id"]
+    turno = client.post(
+        "/tipos-turno",
+        json={"nombre": "Turno conflicto", "hora_inicio": "08:00:00", "hora_fin": "16:00:00"},
+        headers=admin_headers,
+    ).json()
+    from app.models import Asignacion
+    from datetime import date
+    db_session.add(Asignacion(
+        trabajador_id=reemplazante,
+        fecha=date(2027, 4, 1),
+        tipo_turno_id=turno["id"],
+        manual=True,
+    ))
+    db_session.commit()
+    r = client.post(
+        "/reemplazos",
+        json={
+            "trabajador_ausente_id": ausente,
+            "trabajador_reemplazo_id": reemplazante,
+            "tipo_turno_id": turno["id"],
+            "fecha_inicio": "2027-04-01",
+            "fecha_fin": "2027-04-02",
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 409
+
+
+def test_un_ausente_no_puede_tener_dos_coberturas_solapadas(client, admin_headers):
+    ausente = _trab(client, admin_headers, "UN-AUSENTE").json()["id"]
+    reemplazante_a = _trab(client, admin_headers, "UN-RELEVO-A").json()["id"]
+    reemplazante_b = _trab(client, admin_headers, "UN-RELEVO-B").json()["id"]
+    base = {
+        "trabajador_ausente_id": ausente,
+        "fecha_inicio": "2027-05-01",
+        "fecha_fin": "2027-05-03",
+        "motivo": "Permiso",
+    }
+    assert client.post(
+        "/reemplazos", json={**base, "trabajador_reemplazo_id": reemplazante_a}, headers=admin_headers
+    ).status_code == 201
+    cruce = client.post(
+        "/reemplazos",
+        json={**base, "trabajador_reemplazo_id": reemplazante_b},
+        headers=admin_headers,
+    )
+    assert cruce.status_code == 409

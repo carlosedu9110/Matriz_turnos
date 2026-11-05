@@ -34,6 +34,11 @@ class Reemplazo(Base):
     trabajador_ausente: Mapped["Trabajador"] = relationship(foreign_keys=[trabajador_ausente_id])
     trabajador_reemplazo: Mapped["Trabajador"] = relationship(foreign_keys=[trabajador_reemplazo_id])
     tipo_turno: Mapped["TipoTurno"] = relationship()
+    vacacion: Mapped["Vacacion | None"] = relationship(back_populates="reemplazo", uselist=False)
+
+    @property
+    def ligado_vacaciones(self) -> bool:
+        return self.vacacion is not None and self.vacacion.estado == "aprobada"
 
     def __repr__(self) -> str:
         return f"<Reemplazo id={self.id} {self.trabajador_ausente_id}->{self.trabajador_reemplazo_id}>"

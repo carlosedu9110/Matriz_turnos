@@ -537,6 +537,309 @@ function renderAlertas() {
     : "";
 }
 
+// ---- Gestión administrativa de reemplazos ----
+function trabajadorNombre(t) {
+  return `${t.nombres} ${t.apellidos}`;
+}
+
+async function openReemplazos(filtros = {}) {
+  let reemplazos;
+  try {
+    const params = new URLSearchParams({ activo: String(filtros.activo ?? true) });
+    if (filtros.desde) params.set("desde", filtros.desde);
+    if (filtros.hasta) params.set("hasta", filtros.hasta);
+    reemplazos = await Api.get(`/reemplazos?${params}`);
+  } catch (e) { return toast(e.message, true); }
+
+  const estado = el("select", {},
+    el("option", { value: "true" }, "Activos"),
+    el("option", { value: "false" }, "Anulados"));
+  estado.value = String(filtros.activo ?? true);
+  const desde = el("input", { type: "date", value: filtros.desde || "" });
+  const hasta = el("input", { type: "date", value: filtros.hasta || "" });
+  const accion = (label, fn, cls = "") => el("button", {
+    class: `btn ${cls}`, type: "button", onclick: fn,
+  }, label);
+
+  const filas = reemplazos.map((r) => {
+    const participantes = `${trabajadorNombre(r.trabajador_ausente)} → ${trabajadorNombre(r.trabajador_reemplazo)}`;
+    const turno = r.tipo_turno
+      ? `${r.tipo_turno.nombre} · ${hhmm(r.tipo_turno.hora_inicio)}–${hhmm(r.tipo_turno.hora_fin)}`
+      : "Todos los turnos";
+    return el("tr", {},
+      el("td", {}, participantes),
+      el("td", {}, `${fechaLegible(r.fecha_inicio)} – ${fechaLegible(r.fecha_fin)}`),
+      el("td", {}, turno),
+      el("td", {}, r.motivo || "—"),
+      el("td", {}, el("span", { class: `badge ${r.activo ? "ok" : "off"}` }, r.activo ? "Activo" : "Anulado")),
+      el("td", {}, el("div", { class: "row-actions" },
+        r.activo
+          ? [
+              accion("Editar", () => openReemplazoEdit(r, filtros)),
+              accion("Anular", async () => {
+                if (!window.confirm(`¿Anular la cobertura ${participantes}?`)) return;
+                try { await Api.del(`/reemplazos/${r.id}`); toast("Reemplazo anulado"); openReemplazos(filtros); load(); }
+                catch (e) { toast(e.message, true); }
+              }, "danger"),
+            ]
+          : [accion("Reactivar", async () => {
+              try { await Api.post(`/reemplazos/${r.id}/reactivar`); toast("Reemplazo reactivado"); openReemplazos(filtros); load(); }
+              catch (e) { toast(e.message, true); }
+            })],
+      )),
+    );
+  });
+  const runFilter = () => openReemplazos({
+    activo: estado.value === "true",
+    desde: desde.value || undefined,
+    hasta: hasta.value || undefined,
+  });
+  openDialog(
+    el("h2", {}, "Gestión de reemplazos"),
+    el("div", { class: "form-grid" },
+      el("label", {}, "Estado", estado),
+      el("label", {}, "Desde", desde),
+      el("label", {}, "Hasta", hasta),
+      accion("Filtrar", runFilter)),
+    el("div", { class: "actions" },
+      el("span", { class: "muted" }, `${reemplazos.length} coberturas`),
+      accion("＋ Nuevo reemplazo", () => openReemplazoCreate(filtros), "primary")),
+    el("div", { class: "table-scroll" }, el("table", { class: "personal-table" },
+      el("thead", {}, el("tr", {},
+        el("th", {}, "Ausente → reemplazante"), el("th", {}, "Periodo"), el("th", {}, "Turno"),
+        el("th", {}, "Motivo"), el("th", {}, "Estado"), el("th", {}, "Acciones"))),
+      el("tbody", {}, filas.length ? filas : [el("tr", {}, el("td", { colspan: "6" }, "No hay reemplazos para estos filtros."))]))),
+    el("div", { class: "actions" }, cancelBtn()),
+  );
+  $("dlg").classList.add("wide");
+}
+
+async function reemplazoForm(reemplazo = null) {
+  let trabajadores, tipos;
+  try {
+    [trabajadores, tipos] = await Promise.all([
+      Api.get("/trabajadores?activo=true&limit=500"),
+      Api.get("/tipos-turno?activo=true"),
+    ]);
+  } catch (e) { toast(e.message, true); return null; }
+  const ausente = el("select", {}, ...trabajadores.map((t) => {
+    const o = el("option", { value: t.id }, trabajadorNombre(t));
+    if (t.id === reemplazo?.trabajador_ausente.id) o.selected = true;
+    return o;
+  }));
+  const reemplazante = el("select", {}, ...trabajadores.map((t) => {
+    const o = el("option", { value: t.id }, trabajadorNombre(t));
+    if (t.id === reemplazo?.trabajador_reemplazo.id) o.selected = true;
+    return o;
+  }));
+  const tipo = el("select", {},
+    el("option", { value: "" }, "Todos los turnos"),
+    ...tipos.map((t) => {
+      const o = el("option", { value: t.id }, `${t.nombre} · ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`);
+      if (t.id === reemplazo?.tipo_turno_id) o.selected = true;
+      return o;
+    }));
+  const inicio = el("input", { type: "date", required: "", value: reemplazo?.fecha_inicio || iso(new Date()) });
+  const fin = el("input", { type: "date", required: "", value: reemplazo?.fecha_fin || iso(new Date()) });
+  const motivo = el("input", { maxlength: "255", value: reemplazo?.motivo || "", placeholder: "Motivo de la cobertura" });
+  return {
+    nodes: [
+      el("label", {}, "Trabajador ausente", ausente),
+      el("label", {}, "Trabajador que reemplaza", reemplazante),
+      el("label", {}, "Turno", tipo),
+      el("div", { class: "form-grid" }, el("label", {}, "Desde", inicio), el("label", {}, "Hasta", fin)),
+      el("label", {}, "Motivo", motivo),
+    ],
+    value: () => ({
+      trabajador_ausente_id: Number(ausente.value),
+      trabajador_reemplazo_id: Number(reemplazante.value),
+      tipo_turno_id: tipo.value ? Number(tipo.value) : null,
+      fecha_inicio: inicio.value,
+      fecha_fin: fin.value,
+      motivo: motivo.value.trim() || null,
+    }),
+  };
+}
+
+async function openReemplazoCreate(filtros) {
+  const form = await reemplazoForm();
+  if (!form) return;
+  openDialog(
+    el("h2", {}, "Registrar reemplazo"),
+    ...form.nodes,
+    el("p", { class: "muted" }, "No se puede asignar un reemplazante inactivo ni uno que ya tenga turno o cobertura en esas fechas."),
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: () => openReemplazos(filtros) }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try { await Api.post("/reemplazos", form.value()); toast("Reemplazo registrado"); openReemplazos(filtros); load(); }
+        catch (e) { toast(e.message, true); }
+      } }, "Guardar reemplazo")),
+  );
+}
+
+async function openReemplazoEdit(reemplazo, filtros) {
+  const form = await reemplazoForm(reemplazo);
+  if (!form) return;
+  openDialog(
+    el("h2", {}, "Editar reemplazo"),
+    ...form.nodes,
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: () => openReemplazos(filtros) }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try { await Api.patch(`/reemplazos/${reemplazo.id}`, form.value()); toast("Reemplazo actualizado"); openReemplazos(filtros); load(); }
+        catch (e) { toast(e.message, true); }
+      } }, "Guardar cambios")),
+  );
+}
+
+// ---- Gestión administrativa de reemplazos ----
+function nombreTrabajador(t) {
+  return `${t.nombres} ${t.apellidos}`;
+}
+
+async function openReemplazos(filtros = {}) {
+  const filtroActivo = filtros.activo ?? true;
+  const params = new URLSearchParams({ activo: String(filtroActivo) });
+  if (filtros.desde) params.set("desde", filtros.desde);
+  if (filtros.hasta) params.set("hasta", filtros.hasta);
+  let reemplazos;
+  try { reemplazos = await Api.get(`/reemplazos?${params}`); }
+  catch (e) { return toast(e.message, true); }
+
+  const estado = el("select", {}, el("option", { value: "true" }, "Activos"), el("option", { value: "false" }, "Anulados"));
+  estado.value = String(filtroActivo);
+  const desde = el("input", { type: "date", value: filtros.desde || "" });
+  const hasta = el("input", { type: "date", value: filtros.hasta || "" });
+  const accion = (label, fn, cls = "") => el("button", {
+    class: `btn ${cls}`, type: "button", onclick: fn,
+  }, label);
+  const volverFiltros = () => openReemplazos({
+    activo: estado.value === "true",
+    desde: desde.value || undefined,
+    hasta: hasta.value || undefined,
+  });
+  const filas = reemplazos.map((r) => {
+    const participantes = `${nombreTrabajador(r.trabajador_ausente)} → ${nombreTrabajador(r.trabajador_reemplazo)}`;
+    const turno = r.tipo_turno
+      ? `${r.tipo_turno.nombre} · ${hhmm(r.tipo_turno.hora_inicio)}–${hhmm(r.tipo_turno.hora_fin)}`
+      : "Todos los turnos";
+    const acciones = r.ligado_vacaciones
+      ? [el("span", { class: "muted" }, "Gestionar desde Vacaciones")]
+      : r.activo
+      ? [
+          accion("Editar", () => openReemplazoEdit(r, volverFiltros)),
+          accion("Anular", async () => {
+            if (!window.confirm(`¿Anular la cobertura ${participantes}?`)) return;
+            try { await Api.del(`/reemplazos/${r.id}`); toast("Reemplazo anulado"); load(); volverFiltros(); }
+            catch (e) { toast(e.message, true); }
+          }, "danger"),
+        ]
+      : [accion("Reactivar", async () => {
+          try { await Api.post(`/reemplazos/${r.id}/reactivar`); toast("Reemplazo reactivado"); load(); volverFiltros(); }
+          catch (e) { toast(e.message, true); }
+        })];
+    return el("tr", {},
+      el("td", {}, participantes),
+      el("td", {}, `${fechaLegible(r.fecha_inicio)} – ${fechaLegible(r.fecha_fin)}`),
+      el("td", {}, turno),
+      el("td", {}, r.motivo || "—"),
+      el("td", {}, el("span", { class: `badge ${r.activo ? "ok" : "off"}` }, r.activo ? "Activo" : "Anulado")),
+      el("td", {}, el("div", { class: "row-actions" }, acciones)),
+    );
+  });
+  openDialog(
+    el("h2", {}, "Gestión de reemplazos"),
+    el("div", { class: "form-grid" },
+      el("label", {}, "Estado", estado),
+      el("label", {}, "Desde", desde),
+      el("label", {}, "Hasta", hasta),
+      accion("Filtrar", volverFiltros)),
+    el("div", { class: "actions" },
+      el("span", { class: "muted" }, `${reemplazos.length} coberturas`),
+      accion("＋ Nuevo reemplazo", () => openReemplazoCreate(volverFiltros), "primary")),
+    el("div", { class: "table-scroll" }, el("table", { class: "personal-table" },
+      el("thead", {}, el("tr", {},
+        el("th", {}, "Ausente → reemplazante"), el("th", {}, "Periodo"), el("th", {}, "Turno"),
+        el("th", {}, "Motivo"), el("th", {}, "Estado"), el("th", {}, "Acciones"))),
+      el("tbody", {}, filas.length ? filas : [
+        el("tr", {}, el("td", { colspan: "6" }, "No hay reemplazos para estos filtros.")),
+      ]))),
+    el("div", { class: "actions" }, cancelBtn()),
+  );
+  $("dlg").classList.add("wide");
+}
+
+async function formularioReemplazo(reemplazo = null) {
+  let trabajadores, tipos;
+  try {
+    [trabajadores, tipos] = await Promise.all([
+      Api.get("/trabajadores?activo=true&limit=500"),
+      Api.get("/tipos-turno?activo=true"),
+    ]);
+  } catch (e) { toast(e.message, true); return null; }
+  const seleccionar = (lista, seleccionado, rotulo, etiqueta) => el("select", {},
+    ...lista.map((item) => {
+      const option = el("option", { value: item.id }, etiqueta(item));
+      if (item.id === seleccionado) option.selected = true;
+      return option;
+    }));
+  const ausente = seleccionar(trabajadores, reemplazo?.trabajador_ausente.id, "Ausente", nombreTrabajador);
+  const cubre = seleccionar(trabajadores, reemplazo?.trabajador_reemplazo.id, "Reemplazante", nombreTrabajador);
+  const turno = el("select", {}, el("option", { value: "" }, "Todos los turnos"),
+    ...tipos.map((t) => {
+      const option = el("option", { value: t.id }, `${t.nombre} · ${hhmm(t.hora_inicio)}–${hhmm(t.hora_fin)}`);
+      if (t.id === reemplazo?.tipo_turno_id) option.selected = true;
+      return option;
+    }));
+  const inicio = el("input", { type: "date", required: "", value: reemplazo?.fecha_inicio || iso(new Date()) });
+  const fin = el("input", { type: "date", required: "", value: reemplazo?.fecha_fin || iso(new Date()) });
+  const motivo = el("input", { maxlength: "255", value: reemplazo?.motivo || "", placeholder: "Motivo" });
+  return {
+    nodes: [
+      el("label", {}, "Trabajador ausente", ausente),
+      el("label", {}, "Trabajador reemplazante", cubre),
+      el("label", {}, "Turno", turno),
+      el("div", { class: "form-grid" }, el("label", {}, "Desde", inicio), el("label", {}, "Hasta", fin)),
+      el("label", {}, "Motivo", motivo),
+    ],
+    body: () => ({
+      trabajador_ausente_id: Number(ausente.value),
+      trabajador_reemplazo_id: Number(cubre.value),
+      tipo_turno_id: turno.value ? Number(turno.value) : null,
+      fecha_inicio: inicio.value,
+      fecha_fin: fin.value,
+      motivo: motivo.value.trim() || null,
+    }),
+  };
+}
+
+async function openReemplazoCreate(volver) {
+  const form = await formularioReemplazo();
+  if (!form) return;
+  openDialog(
+    el("h2", {}, "Nuevo reemplazo"),
+    ...form.nodes,
+    el("p", { class: "muted" }, "El reemplazante debe estar activo y libre de turnos/coberturas durante ese periodo."),
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: volver }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try { await Api.post("/reemplazos", form.body()); toast("Reemplazo registrado"); load(); volver(); }
+        catch (e) { toast(e.message, true); }
+      } }, "Guardar")),
+  );
+}
+
+async function openReemplazoEdit(reemplazo, volver) {
+  const form = await formularioReemplazo(reemplazo);
+  if (!form) return;
+  openDialog(
+    el("h2", {}, "Editar reemplazo"),
+    ...form.nodes,
+    el("div", { class: "actions" }, el("button", { class: "btn", type: "button", onclick: volver }, "Volver"),
+      el("button", { class: "btn primary", type: "button", onclick: async () => {
+        try { await Api.patch(`/reemplazos/${reemplazo.id}`, form.body()); toast("Reemplazo actualizado"); load(); volver(); }
+        catch (e) { toast(e.message, true); }
+      } }, "Guardar cambios")),
+  );
+}
+
 // ---- Vacaciones: solicitud personal y revisión exclusiva del Admin ----
 function fechaLegible(fecha) {
   return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" }).format(parse(fecha));
@@ -1122,6 +1425,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("today").onclick = () => { state.anchor = new Date(); load(); };
   $("generate").onclick = openGenerar;
   $("users").onclick = openPersonal;
+  $("replacements").onclick = () => openReemplazos();
+  $("replacements").onclick = () => openReemplazos();
   $("vacations").onclick = openVacaciones;
   $("bulk-assign").onclick = openAsignacionMasiva;
   $("assign-mode").onclick = () => {

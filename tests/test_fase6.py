@@ -202,7 +202,9 @@ def test_generacion_ciclica_no_asigna_durante_vacaciones_aprobadas(
     assert puntual.status_code == 409
 
 
-def test_aprobar_con_reemplazante_crea_cobertura(client, admin_headers, user_headers, vacation_accounts, fechas):
+def test_aprobar_con_reemplazante_crea_cobertura(
+    client, admin_headers, user_headers, vacation_accounts, fechas, db_session
+):
     desde, hasta = fechas
     ausente, reemplazo = vacation_accounts["trabajadores"][:2]
     solicitud = _solicitar(client, user_headers, desde, hasta).json()
@@ -212,12 +214,26 @@ def test_aprobar_con_reemplazante_crea_cobertura(client, admin_headers, user_hea
         headers=admin_headers,
     )
     assert r.status_code == 200 and r.json()["reemplazo_id"] is not None
+    reemplazo_admin = client.get("/reemplazos", headers=admin_headers).json()[0]
+    assert reemplazo_admin["ligado_vacaciones"] is True
+    replacement_id = reemplazo_admin["id"]
+    assert client.patch(
+        f"/reemplazos/{replacement_id}",
+        json={"motivo": "Cambio independiente"},
+        headers=admin_headers,
+    ).status_code == 409
+    assert client.delete(f"/reemplazos/{replacement_id}", headers=admin_headers).status_code == 409
     matriz = client.get(
         f"/matriz?desde={desde.isoformat()}&hasta={desde.isoformat()}",
         headers=admin_headers,
     ).json()
     assert matriz["vacaciones"][0]["reemplazante"]["id"] == reemplazo.id
     assert client.get("/reemplazos", headers=admin_headers).json()[0]["trabajador_ausente"]["id"] == ausente.id
+    from app.models import Reemplazo
+    linked = db_session.get(Reemplazo, replacement_id)
+    linked.activo = False
+    db_session.commit()
+    assert client.post(f"/reemplazos/{replacement_id}/reactivar", headers=admin_headers).status_code == 409
 
 
 def test_rechaza_reemplazante_inactivo_o_con_turnos_conflictivos(
